@@ -1,0 +1,21 @@
+# 构建产物
+bin/
+dist/
+*.exe
+
+# 运行时数据（开发目录）
+data/cache.db
+data/mihomo.log
+data/providers/
+data/subscription.url
+data/mode
+data/geoip.metadb
+data/geoip.metadb.download
+
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# 系统文件
+.DS_Store
