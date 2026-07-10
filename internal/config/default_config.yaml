@@ -35,6 +35,12 @@ proxy-groups:
       - subscription
     proxies:
       - DIRECT
+  - name: GLOBAL
+    type: select
+    use:
+      - subscription
+    proxies:
+      - DIRECT
 
 rules:
   - MATCH,PROXY

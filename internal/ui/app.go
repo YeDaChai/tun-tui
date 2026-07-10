@@ -471,7 +471,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.running = true
 		m.status = ""
 		m.err = ""
-		return m, refresh(m)
+		return m, tea.Batch(refresh(m), syncGlobalProxyIfNeeded(m))
 
 	case autoConnectMsg:
 		return m.beginConnect()
@@ -1334,6 +1334,18 @@ func nextMode(current string) string {
 		return "rule"
 	default:
 		return "rule"
+	}
+}
+
+func syncGlobalProxyIfNeeded(m Model) tea.Cmd {
+	return func() tea.Msg {
+		if config.NormalizeMode(config.LoadMode(m.paths.DataDir, "rule")) != "global" {
+			return nil
+		}
+		if err := m.api.SyncGlobalFromProxy(); err != nil {
+			return actionMsg{err: err}
+		}
+		return nil
 	}
 }
 

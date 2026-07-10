@@ -96,12 +96,47 @@ func (c *Client) Proxies() (ProxiesResponse, error) {
 	return resp, json.Unmarshal(data, &resp)
 }
 
+const GlobalProxyGroup = "GLOBAL"
+const DefaultProxyGroup = "PROXY"
+
 func (c *Client) SelectProxy(group, node string) error {
+	if err := c.selectProxy(group, node); err != nil {
+		return err
+	}
+	if group == DefaultProxyGroup {
+		return c.selectProxy(GlobalProxyGroup, node)
+	}
+	return nil
+}
+
+func (c *Client) selectProxy(group, node string) error {
 	_, err := c.request(http.MethodPut, "/proxies/"+group, map[string]string{"name": node})
 	return err
 }
 
+func (c *Client) SyncGlobalFromProxy() error {
+	proxies, err := c.Proxies()
+	if err != nil {
+		return err
+	}
+	proxy, ok := proxies.Proxies[DefaultProxyGroup]
+	if !ok || proxy.Now == "" {
+		return nil
+	}
+	global, ok := proxies.Proxies[GlobalProxyGroup]
+	if ok && global.Now == proxy.Now {
+		return nil
+	}
+	return c.selectProxy(GlobalProxyGroup, proxy.Now)
+}
+
 func (c *Client) PatchMode(mode string) error {
+	mode = strings.ToLower(strings.TrimSpace(mode))
+	if mode == "global" {
+		if err := c.SyncGlobalFromProxy(); err != nil {
+			return err
+		}
+	}
 	_, err := c.request(http.MethodPatch, "/configs", map[string]string{"mode": mode})
 	return err
 }
