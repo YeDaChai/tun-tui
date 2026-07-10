@@ -80,9 +80,31 @@ resolve_install_dir() {
 
 fetch_latest_version() {
 	need_cmd curl
-	curl -fsSL "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" \
-		| sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\?\([^"]*\)".*/\1/p' \
-		| head -n1
+	json=""
+	if json="$(curl -fsSL --http1.1 \
+		-H "Accept: application/vnd.github+json" \
+		"https://api.github.com/repos/${GITHUB_REPO}/releases/latest" 2>/dev/null)"; then
+		ver="$(printf '%s\n' "$json" \
+			| sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
+			| head -n1 \
+			| sed 's/^v//')"
+		if [ -n "$ver" ]; then
+			printf '%s' "$ver"
+			return
+		fi
+	fi
+
+	# API 失败或解析失败时，跟随 releases/latest 重定向
+	ver="$(curl -fsSIL --http1.1 "https://github.com/${GITHUB_REPO}/releases/latest" 2>/dev/null \
+		| sed -n 's/^[Ll]ocation:.*\/tag\/v\{0,1\}//p' \
+		| tr -d '\r\n' \
+		| head -n1)"
+	if [ -n "$ver" ]; then
+		printf '%s' "$ver"
+		return
+	fi
+
+	die "无法获取最新版本（请检查网络，或用 -v 指定版本）"
 }
 
 fetch_release_tag() {
@@ -90,7 +112,6 @@ fetch_release_tag() {
 		printf 'v%s' "$VERSION"
 	else
 		ver="$(fetch_latest_version)"
-		[ -n "$ver" ] || die "无法获取最新版本"
 		printf 'v%s' "$ver"
 	fi
 }
@@ -134,10 +155,10 @@ install_binary() {
 	trap 'rm -rf "$tmpdir"' EXIT INT TERM
 
 	log "下载 ${archive} ..."
-	curl -fsSL -o "${tmpdir}/${archive}" "${base_url}/${archive}"
+	curl -fsSL --http1.1 -o "${tmpdir}/${archive}" "${base_url}/${archive}"
 
 	log "下载 SHA256SUMS ..."
-	if curl -fsSL -o "${tmpdir}/SHA256SUMS" "${base_url}/SHA256SUMS" 2>/dev/null; then
+	if curl -fsSL --http1.1 -o "${tmpdir}/SHA256SUMS" "${base_url}/SHA256SUMS" 2>/dev/null; then
 		verify_checksum "${tmpdir}/SHA256SUMS" "$archive"
 	else
 		log "跳过校验（未找到 SHA256SUMS）"
