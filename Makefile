@@ -3,7 +3,7 @@
 .PHONY: build build-all release run install clean help
 
 APP      := tun-tui
-VERSION  ?= 0.1.1
+VERSION  ?= 0.1.2
 COMMIT   := $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 DATE     := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 MODULE   := tun-tui
@@ -58,10 +58,18 @@ build-all:
 	@for p in $(PLATFORMS); do \
 		os=$${p%/*}; arch=$${p#*/}; \
 		ext=; [ "$$os" = windows ] && ext=.exe; \
+		case "$$os/$$arch" in \
+			darwin/arm64)  label=macos-apple-silicon-arm64 ;; \
+			darwin/amd64)  label=macos-intel-x86_64 ;; \
+			linux/amd64)   label=linux-x86_64 ;; \
+			linux/arm64)   label=linux-arm64 ;; \
+			windows/amd64) label=windows-x86_64 ;; \
+			*)             label=$$os-$$arch ;; \
+		esac; \
 		tags=; [ "$$os" = darwin ] && tags="-tags with_gvisor"; \
-		echo ">> build $$os/$$arch$$([ -n "$$tags" ] && echo " [with_gvisor]" || echo "")"; \
+		echo ">> build $$label$$([ -n "$$tags" ] && echo " [with_gvisor]" || echo "")"; \
 		GOOS=$$os GOARCH=$$arch go build $$tags -ldflags "$(LDFLAGS)" \
-			-o $(BIN_DIR)/$(APP)-$$os-$$arch$$ext ./cmd/app/ || exit 1; \
+			-o $(BIN_DIR)/$(APP)-$$label$$ext ./cmd/app/ || exit 1; \
 	done
 	@echo "done -> $(BIN_DIR)/"
 
@@ -72,8 +80,8 @@ release: build-all
 		os=$${p%/*}; arch=$${p#*/}; \
 		ext=; [ "$$os" = windows ] && ext=.exe; \
 		case "$$os/$$arch" in \
-			darwin/arm64)  label=macos-apple-silicon ;; \
-			darwin/amd64)  label=macos-intel ;; \
+			darwin/arm64)  label=macos-apple-silicon-arm64 ;; \
+			darwin/amd64)  label=macos-intel-x86_64 ;; \
 			linux/amd64)   label=linux-x86_64 ;; \
 			linux/arm64)   label=linux-arm64 ;; \
 			windows/amd64) label=windows-x86_64 ;; \
@@ -81,7 +89,7 @@ release: build-all
 		esac; \
 		name=$(APP)-$(VERSION)-$$label; \
 		tmp=$$(mktemp -d); \
-		cp $(BIN_DIR)/$(APP)-$$os-$$arch$$ext $$tmp/$(APP)$$ext; \
+		cp $(BIN_DIR)/$(APP)-$$label$$ext $$tmp/$(APP)$$ext; \
 		if [ "$$os" = darwin ] && command -v codesign >/dev/null 2>&1; then \
 			codesign -s - --force --timestamp=none $$tmp/$(APP)$$ext >/dev/null 2>&1 || true; \
 		fi; \
@@ -125,6 +133,6 @@ help:
 	@echo ""
 	@echo "产物:"
 	@echo "  本机: bin/$(APP)$(BIN_EXT)"
-	@echo "  全平台: bin/$(APP)-<os>-<arch>[.exe]"
+	@echo "  全平台: bin/$(APP)-<platform>[.exe]"
 	@echo "  发布包: dist/$(APP)-<version>-<platform>.tar.gz|.zip"
-	@echo "          例: $(APP)-$(VERSION)-macos-apple-silicon.tar.gz"
+	@echo "          例: $(APP)-$(VERSION)-macos-apple-silicon-arm64.tar.gz"

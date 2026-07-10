@@ -15,8 +15,8 @@ sudo tun-tui
 
 | 你的电脑 | 下载文件 |
 |----------|----------|
-| Mac M1 / M2 / M3 / M4 | `*-macos-apple-silicon.tar.gz` |
-| Mac Intel 芯片 | `*-macos-intel.tar.gz` |
+| Mac M1 / M2 / M3 / M4 | `*-macos-apple-silicon-arm64.tar.gz` |
+| Mac Intel 芯片 | `*-macos-intel-x86_64.tar.gz` |
 | Linux 普通电脑 | `*-linux-x86_64.tar.gz` |
 | Linux ARM（树莓派等） | `*-linux-arm64.tar.gz` |
 | Windows 64 位 | `*-windows-x86_64.zip` |
@@ -47,6 +47,6 @@ make run        # 运行（需 sudo）
 make release    # 打包到 dist/
 ```
 
-发布：`git tag v0.1.1 && git push origin v0.1.1`
+发布：`git tag v0.1.2 && git push origin v0.1.2`
 
 MIT

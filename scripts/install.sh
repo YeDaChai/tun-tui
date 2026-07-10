@@ -49,13 +49,13 @@ detect_platform() {
 	case "$arch" in
 	x86_64 | amd64)
 		case "$platform_os" in
-		macos) platform_label=intel ;;
+		macos) platform_label=intel-x86_64 ;;
 		*) platform_label=x86_64 ;;
 		esac
 		;;
 	arm64 | aarch64)
 		case "$platform_os" in
-		macos) platform_label=apple-silicon ;;
+		macos) platform_label=apple-silicon-arm64 ;;
 		*) platform_label=arm64 ;;
 		esac
 		;;

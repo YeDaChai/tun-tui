@@ -26,17 +26,86 @@ const (
 	screenSubInput
 )
 
+// ─── color palette ────────────────────────────────────────────
 var (
-	titleStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("205"))
-	statusOn    = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
-	statusOff   = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
-	helpStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	errStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
-	dimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
-	inputStyle  = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1)
-	activeItem  = lipgloss.NewStyle().Underline(true).Foreground(lipgloss.Color("205"))
-	currentItem = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
-	normalItem  = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
+	accent    = lipgloss.Color("51")
+	accentDim = lipgloss.Color("36")
+	green     = lipgloss.Color("42")
+	red       = lipgloss.Color("196")
+	yellow    = lipgloss.Color("220")
+	muted     = lipgloss.Color("241")
+	subtle    = lipgloss.Color("238")
+	bright    = lipgloss.Color("255")
+	fg        = lipgloss.Color("252")
+)
+
+// ─── base styles ──────────────────────────────────────────────
+var (
+	titleStyle = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(accent)
+
+	panelBorder = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(subtle).
+			Padding(0, 1)
+
+	panelBorderActive = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(accentDim).
+				Padding(0, 1)
+
+	statusOn  = lipgloss.NewStyle().Foreground(green).Bold(true)
+	statusOff = lipgloss.NewStyle().Foreground(red)
+
+	errStyle = lipgloss.NewStyle().Foreground(red)
+	dimStyle = lipgloss.NewStyle().Foreground(muted)
+
+	// input
+	inputStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(accent).
+			Padding(1, 2)
+
+	// list items
+	selectedItem = lipgloss.NewStyle().
+			Foreground(bright).
+			Background(lipgloss.Color("236"))
+	currentItem = lipgloss.NewStyle().
+			Foreground(green)
+	normalItem = lipgloss.NewStyle().
+			Foreground(fg)
+
+	// scrollbar
+	scrollTrack = lipgloss.NewStyle().Foreground(subtle)
+	scrollThumb = lipgloss.NewStyle().Foreground(muted)
+
+	// latency coloring
+	latencyFast = lipgloss.NewStyle().Foreground(lipgloss.Color("42"))
+	latencyMid  = lipgloss.NewStyle().Foreground(lipgloss.Color("220"))
+	latencySlow = lipgloss.NewStyle().Foreground(lipgloss.Color("196"))
+
+	// traffic arrows
+	upArrow   = lipgloss.NewStyle().Foreground(accent)
+	downArrow = lipgloss.NewStyle().Foreground(green)
+
+	// usage bar
+	barFilledLow    = lipgloss.NewStyle().Foreground(accent)
+	barFilledMid    = lipgloss.NewStyle().Foreground(yellow)
+	barFilledHigh   = lipgloss.NewStyle().Foreground(red)
+	barEmpty        = lipgloss.NewStyle().Foreground(subtle)
+
+	// keybinding chips
+	keyStyle = lipgloss.NewStyle().
+			Foreground(accent).
+			Bold(true)
+	keySep = lipgloss.NewStyle().
+			Foreground(subtle)
+
+	// section label
+	sectionLabel = lipgloss.NewStyle().
+			Bold(true).
+			Foreground(accentDim)
 )
 
 type tickMsg struct{}
@@ -45,6 +114,7 @@ type refreshMsg struct {
 	mode            string
 	traffic         api.Traffic
 	group           api.Proxy
+	groups          []string
 	provider        api.ProxyProvider
 	hasSubscription bool
 	err             error
@@ -77,6 +147,8 @@ type Model struct {
 	mode            string
 	traffic         api.Traffic
 	group           api.Proxy
+	proxyGroups     []string
+	activeGroup     string
 	provider        api.ProxyProvider
 	hasSubscription bool
 	nodes           []string
@@ -111,6 +183,7 @@ func New(paths config.Paths, runner *core.Runner, client *api.Client, appVersion
 		screen:          screenMain,
 		subInput:        ti,
 		subscriptionURL: subURL,
+		activeGroup:     "PROXY",
 		nodes:           []string{},
 		delays:          map[string]uint16{},
 		status:          status,
@@ -160,13 +233,24 @@ func refresh(m Model) tea.Cmd {
 			return refreshMsg{err: err}
 		}
 
-		group, ok := proxies.Proxies["PROXY"]
+		var groups []string
+		for name, p := range proxies.Proxies {
+			if len(p.All) > 0 {
+				groups = append(groups, name)
+			}
+		}
+
+		group, ok := proxies.Proxies[m.activeGroup]
 		if !ok {
-			return refreshMsg{
-				version: version.Version,
-				mode:    config.NormalizeMode(cfg.Mode),
-				traffic: traffic,
-				err:     fmt.Errorf("配置中未找到 PROXY 策略组"),
+			if len(groups) > 0 {
+				group = proxies.Proxies[groups[0]]
+			} else {
+				return refreshMsg{
+					version: version.Version,
+					mode:    config.NormalizeMode(cfg.Mode),
+					traffic: traffic,
+					err:     fmt.Errorf("no proxy groups found"),
+				}
 			}
 		}
 
@@ -176,6 +260,7 @@ func refresh(m Model) tea.Cmd {
 			mode:            config.NormalizeMode(cfg.Mode),
 			traffic:         traffic,
 			group:           group,
+			groups:          groups,
 			hasSubscription: subURL != "",
 		}
 
@@ -192,7 +277,7 @@ func refresh(m Model) tea.Cmd {
 
 func testDelay(m Model) tea.Cmd {
 	return func() tea.Msg {
-		delays, err := m.api.GroupDelay("PROXY", testURL)
+		delays, err := m.api.GroupDelay(m.activeGroup, testURL)
 		return delayMsg{delays: delays, err: err}
 	}
 }
@@ -279,6 +364,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.mode = msg.mode
 		m.traffic = msg.traffic
 		m.group = msg.group
+		m.proxyGroups = msg.groups
 		m.provider = msg.provider
 		m.hasSubscription = msg.hasSubscription
 		m.nodes = msg.group.All
@@ -477,7 +563,7 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		node := m.nodes[m.cursor]
 		return m, func() tea.Msg {
-			err := m.api.SelectProxy("PROXY", node)
+			err := m.api.SelectProxy(m.activeGroup, node)
 			if err != nil {
 				return actionMsg{err: err}
 			}
@@ -595,73 +681,332 @@ func lineCount(s string) int {
 	return n
 }
 
+// ─── header ───────────────────────────────────────────────────
+
 func (m Model) renderHeader() string {
 	var b strings.Builder
 
-	b.WriteString(titleStyle.Render(m.fitLine(fmt.Sprintf("VPN TUI %s", m.appVersion))))
+	// title bar with decorative line
+	title := fmt.Sprintf("VPN TUI %s", m.appVersion)
+	b.WriteString(titleStyle.Render(title))
+	b.WriteString("\n")
+
+	// separator
+	sep := sepStyle.Render(strings.Repeat("─", m.contentWidth()))
+	b.WriteString(sep)
 	b.WriteString("\n\n")
 
-	statusText := "○ 未连接"
-	statusStyle := statusOff
-	if m.running {
-		statusText = "● VPN 已连接"
-		statusStyle = statusOn
-	} else if m.starting {
-		statusText = "● 连接中"
-		statusStyle = statusOn
-	}
-	rest := fmt.Sprintf("   内核: %s   路由: %s", emptyDash(m.version), modeLabel(m.mode))
-	maxRest := m.contentWidth() - runewidth.StringWidth(statusText)
-	if maxRest < 0 {
-		maxRest = 0
-	}
-	b.WriteString(statusStyle.Render(statusText))
-	b.WriteString(truncateRunewidth(rest, maxRest))
-	b.WriteString("\n")
-	b.WriteString(m.fitLine(fmt.Sprintf("上传: %s   下载: %s", formatRate(m.traffic.Up), formatRate(m.traffic.Down))))
-	b.WriteString("\n")
-	b.WriteString(m.fitLine(fmt.Sprintf("状态: %s", m.status)))
-	b.WriteString("\n")
-
-	if m.hasSubscription {
-		subLine := "订阅: " + maskURL(m.subscriptionURL)
-		if info := m.provider.SubscriptionInfo; info != nil && info.Total > 0 {
-			used := info.Upload + info.Download
-			subLine += fmt.Sprintf("   流量: %s / %s", formatTraffic(used), formatTraffic(info.Total))
-		}
-		b.WriteString(dimStyle.Render(m.fitLine(subLine)))
-		b.WriteString("\n")
-	}
-	if m.err != "" {
-		b.WriteString(errStyle.Render(m.fitLine("错误: " + m.err)))
-		b.WriteString("\n")
-	}
-
-	b.WriteString("\n")
-	listTitle := "策略组 PROXY"
-	if len(m.nodes) > 0 {
-		listTitle += fmt.Sprintf(" (%d/%d)", m.cursor+1, len(m.nodes))
-	}
-	listLine := listTitle
-	if m.group.Now != "" {
-		listLine += "   当前: " + m.group.Now
-	}
-	b.WriteString(titleStyle.Render(m.fitLine(listLine)))
-	b.WriteString("\n")
-	b.WriteString(dimStyle.Render(strings.Repeat("─", minInt(m.contentWidth(), 40))))
-	b.WriteString("\n")
 	return b.String()
 }
 
-func (m Model) renderFooter() string {
-	return "\n\n" + helpStyle.Render(m.fitLine("i 订阅  s 连接  m 模式  jk 移动  enter 选择  u 更新  t 测速  q 退出")) + "\n"
+// ─── status section ───────────────────────────────────────────
+
+func (m Model) renderStatus() string {
+	var b strings.Builder
+
+	// row 1: connection status + kernel + mode
+	statusIcon := "○"
+	statusLabel := "未连接"
+	statusStyle := statusOff
+	if m.running {
+		statusIcon = "●"
+		statusLabel = "已连接"
+		statusStyle = statusOn
+	} else if m.starting {
+		statusIcon = "◉"
+		statusLabel = "连接中"
+		statusStyle = statusOn
+	}
+
+	b.WriteString(statusStyle.Render(fmt.Sprintf("%s %s", statusIcon, statusLabel)))
+
+	metaParts := []string{}
+	if m.version != "" {
+		metaParts = append(metaParts, fmt.Sprintf("内核 %s", m.version))
+	}
+	if m.mode != "" {
+		metaParts = append(metaParts, fmt.Sprintf("路由 %s", modeLabel(m.mode)))
+	}
+	if len(metaParts) > 0 {
+		meta := "  " + strings.Join(metaParts, "  ")
+		b.WriteString(dimStyle.Render(meta))
+	}
+	b.WriteString("\n")
+
+	// row 2: traffic
+	if m.running {
+		up := formatRate(m.traffic.Up)
+		down := formatRate(m.traffic.Down)
+		b.WriteString(upArrow.Render("↑ ") + up)
+		b.WriteString(dimStyle.Render("  "))
+		b.WriteString(downArrow.Render("↓ ") + down)
+	} else {
+		b.WriteString(dimStyle.Render("↑ -  ↓ -"))
+	}
+	b.WriteString("\n")
+
+	// row 3: status text
+	b.WriteString(dimStyle.Render(m.fitLine(m.status)))
+	b.WriteString("\n")
+
+	// row 4: subscription
+	if m.hasSubscription {
+		b.WriteString(dimStyle.Render(m.fitLine(maskURL(m.subscriptionURL))))
+		b.WriteString("\n")
+		if info := m.provider.SubscriptionInfo; info != nil && info.Total > 0 {
+			used := info.Upload + info.Download
+			bar := renderUsageBar(used, info.Total, 20)
+			b.WriteString(dimStyle.Render(fmt.Sprintf("  %s  %s / %s", bar, formatTraffic(used), formatTraffic(info.Total))))
+			b.WriteString("\n")
+		}
+	}
+
+	// error
+	if m.err != "" {
+		b.WriteString(errStyle.Render(m.fitLine("✗ " + m.err)))
+		b.WriteString("\n")
+	}
+
+	return b.String()
 }
+
+// ─── proxy list panel ─────────────────────────────────────────
+
+func (m Model) renderProxyPanel() string {
+	var b strings.Builder
+
+	// panel title
+	title := fmt.Sprintf(" %s ", m.activeGroup)
+	if len(m.nodes) > 0 {
+		title = fmt.Sprintf(" %s (%d/%d) ", m.activeGroup, m.cursor+1, len(m.nodes))
+	}
+	if m.group.Now != "" {
+		title += fmt.Sprintf("◆ %s ", m.group.Now)
+	}
+
+	panelWidth := m.contentWidth() - 4
+	if panelWidth < 20 {
+		panelWidth = 20
+	}
+
+	titleLine := sectionLabel.Render(truncateRunewidth(title, panelWidth))
+	b.WriteString(titleLine)
+	b.WriteString("\n")
+
+	// separator line
+	b.WriteString(sepStyle.Render(strings.Repeat("─", panelWidth)))
+	b.WriteString("\n")
+
+	// node list
+	b.WriteString(m.renderNodeList())
+	return b.String()
+}
+
+func (m Model) renderNodeList() string {
+	vp := m.listViewport()
+	panelWidth := m.contentWidth() - 4
+	if panelWidth < 20 {
+		panelWidth = 20
+	}
+
+	var lines []string
+
+	if len(m.nodes) == 0 {
+		lines = append(lines, dimStyle.Render("  "+m.emptyListHintText()))
+	} else {
+		if vp.showUpArrow {
+			lines = append(lines, dimStyle.Render("  ↑"))
+		}
+		for i := m.rowOffset; i < vp.endIdx; i++ {
+			itemLine := m.formatListItem(i, panelWidth)
+			scrollChar := m.scrollbarChar(i-m.rowOffset, vp)
+			lines = append(lines, itemLine+scrollChar)
+		}
+		if vp.showDownArrow {
+			lines = append(lines, dimStyle.Render("  ↓"))
+		}
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+func (m Model) scrollbarChar(row int, vp struct {
+	visibleRows   int
+	showUpArrow   bool
+	showDownArrow bool
+	endIdx        int
+}) string {
+	total := len(m.nodes)
+	visible := vp.visibleRows
+	if total <= visible {
+		return ""
+	}
+
+	thumbSize := visible * visible / total
+	if thumbSize < 1 {
+		thumbSize = 1
+	}
+	thumbStart := m.rowOffset * visible / total
+	thumbEnd := thumbStart + thumbSize
+	if thumbEnd > visible {
+		thumbEnd = visible
+	}
+
+	if row >= thumbStart && row < thumbEnd {
+		return scrollThumb.Render("▐")
+	}
+	return scrollTrack.Render("▐")
+}
+
+func (m Model) emptyListHintText() string {
+	switch {
+	case m.starting:
+		return "(正在建立 VPN 连接...)"
+	case m.running:
+		return "(正在加载节点...)"
+	case m.hasSubscription:
+		return "(等待连接...)"
+	default:
+		return "(按 i 输入订阅地址)"
+	}
+}
+
+func (m Model) formatListItem(idx int, width int) string {
+	node := m.nodes[idx]
+	active := idx == m.cursor
+	current := node == m.group.Now
+
+	prefix := "  "
+	if current {
+		prefix = "● "
+	}
+
+	delayStr := ""
+	var delayStyle lipgloss.Style
+	if d, ok := m.delays[node]; ok {
+		if d > 0 {
+			delayStr = fmt.Sprintf("%dms", d)
+			switch {
+			case d < 200:
+				delayStyle = latencyFast
+			case d < 500:
+				delayStyle = latencyMid
+			default:
+				delayStyle = latencySlow
+			}
+		} else {
+			delayStr = "×"
+			delayStyle = latencySlow
+		}
+	}
+
+	// width already accounts for border+padding, -1 for scrollbar gutter
+	nameMax := width - runewidth.StringWidth(prefix) - 1
+	if delayStr != "" {
+		nameMax -= runewidth.StringWidth(delayStr) + 2
+	}
+	if nameMax < 4 {
+		nameMax = 4
+	}
+
+	line := prefix + truncateRunewidth(node, nameMax)
+	itemStyle := normalItem
+	switch {
+	case active:
+		itemStyle = selectedItem
+	case current:
+		itemStyle = currentItem
+	}
+
+	if delayStr != "" {
+		pad := width - 1 - runewidth.StringWidth(line) - runewidth.StringWidth(delayStr)
+		if pad < 1 {
+			pad = 1
+		}
+		return itemStyle.Render(line+strings.Repeat(" ", pad)) + delayStyle.Render(delayStr)
+	}
+
+	remaining := width - 1 - runewidth.StringWidth(line)
+	if remaining > 0 {
+		line += strings.Repeat(" ", remaining)
+	}
+	return itemStyle.Render(line)
+}
+
+// ─── footer / keybindings ─────────────────────────────────────
+
+func (m Model) renderFooter() string {
+	var b strings.Builder
+
+	b.WriteString("\n")
+	b.WriteString(sepStyle.Render(strings.Repeat("─", m.contentWidth())))
+	b.WriteString("\n")
+
+	keys := [][2]string{
+		{"i", "订阅"},
+		{"s", "连接"},
+		{"m", "模式"},
+		{"j/k", "移动"},
+		{"↵", "选择"},
+		{"u", "更新"},
+		{"t", "测速"},
+		{"r", "重载"},
+		{"q", "退出"},
+	}
+
+	width := m.contentWidth()
+	sep := "  "
+	sepW := runewidth.StringWidth(sep)
+
+	var line strings.Builder
+	lineW := 0
+	first := true
+
+	flush := func() {
+		if line.Len() == 0 {
+			return
+		}
+		b.WriteString(line.String())
+		b.WriteString("\n")
+		line.Reset()
+		lineW = 0
+		first = true
+	}
+
+	for _, k := range keys {
+		chip := keyStyle.Render(k[0]) + dimStyle.Render(" "+k[1])
+		chipW := runewidth.StringWidth(k[0]) + 1 + runewidth.StringWidth(k[1])
+		need := chipW
+		if !first {
+			need += sepW
+		}
+		if !first && lineW+need > width {
+			flush()
+		}
+		if !first {
+			line.WriteString(sep)
+			lineW += sepW
+		}
+		line.WriteString(chip)
+		lineW += chipW
+		first = false
+	}
+	flush()
+
+	return b.String()
+}
+
+// ─── viewport helpers ─────────────────────────────────────────
 
 func (m Model) listBudget() int {
 	if m.height <= 0 {
 		return 8
 	}
-	budget := m.height - lineCount(m.renderHeader()) - lineCount(m.renderFooter())
+	used := lineCount(m.renderHeader()) +
+		lineCount(m.renderStatus()) +
+		5 + // blank + border top + title + separator + border bottom
+		lineCount(m.renderFooter())
+	budget := m.height - used
 	if budget < 1 {
 		return 1
 	}
@@ -708,96 +1053,70 @@ func (m Model) listViewport() struct {
 	}{visible, showUp, showDown, endIdx}
 }
 
+// ─── main view ────────────────────────────────────────────────
+
+func (m Model) View() string {
+	if m.screen == screenSubInput {
+		return m.viewSubInput()
+	}
+	return m.viewMain()
+}
+
+func (m Model) viewSubInput() string {
+	var b strings.Builder
+
+	b.WriteString(titleStyle.Render("输入订阅地址"))
+	b.WriteString("\n\n")
+	b.WriteString(dimStyle.Render("粘贴订阅链接，回车保存，Esc 取消"))
+	b.WriteString("\n\n")
+
+	inputView := inputStyle.Render(m.subInput.View())
+	b.WriteString(inputView)
+	b.WriteString("\n\n")
+
+	// styled hints
+	b.WriteString(keyStyle.Render("Enter") + dimStyle.Render(" 保存"))
+	b.WriteString(keySep.Render("  │  "))
+	b.WriteString(keyStyle.Render("Esc") + dimStyle.Render(" 取消"))
+	b.WriteString("\n")
+
+	return b.String()
+}
+
+func (m Model) viewMain() string {
+	var b strings.Builder
+
+	b.WriteString(m.renderHeader())
+	b.WriteString(m.renderStatus())
+	b.WriteString("\n")
+
+	// proxy panel with border
+	panelContent := m.renderProxyPanel()
+
+	if m.running && m.activeGroup != "" {
+		b.WriteString(panelBorderActive.Width(m.contentWidth()).Render(panelContent))
+	} else {
+		b.WriteString(panelBorder.Width(m.contentWidth()).Render(panelContent))
+	}
+
+	b.WriteString(m.renderFooter())
+
+	// fill remaining height
+	if m.height > 0 {
+		if total := lineCount(b.String()); total < m.height {
+			b.WriteString(strings.Repeat("\n", m.height-total))
+		}
+	}
+
+	return b.String()
+}
+
+// ─── helpers ──────────────────────────────────────────────────
+
+var sepStyle = lipgloss.NewStyle().Foreground(subtle)
+
 func (m Model) fitLine(s string) string {
 	return truncateRunewidth(s, m.contentWidth())
-}
-
-func (m Model) emptyListHint() string {
-	switch {
-	case m.starting:
-		return dimStyle.Render("  (正在建立 VPN 连接...)")
-	case m.running:
-		return dimStyle.Render("  (正在加载节点...)")
-	case m.hasSubscription:
-		return dimStyle.Render("  (等待连接...)")
-	default:
-		return dimStyle.Render("  (按 i 输入订阅地址)")
-	}
-}
-
-func (m Model) renderNodeList() string {
-	budget := m.listBudget()
-	var lines []string
-
-	if len(m.nodes) == 0 {
-		lines = append(lines, m.emptyListHint())
-	} else {
-		vp := m.listViewport()
-		if vp.showUpArrow {
-			lines = append(lines, dimStyle.Render("  ↑"))
-		}
-		for i := m.rowOffset; i < vp.endIdx; i++ {
-			lines = append(lines, m.formatListItem(i))
-		}
-		if vp.showDownArrow {
-			lines = append(lines, dimStyle.Render("  ↓"))
-		}
-	}
-
-	for len(lines) < budget {
-		lines = append(lines, "")
-	}
-	if len(lines) > budget {
-		lines = lines[:budget]
-	}
-	return strings.Join(lines, "\n")
-}
-
-func (m Model) formatListItem(idx int) string {
-	node := m.nodes[idx]
-	active := idx == m.cursor
-	current := node == m.group.Now
-
-	prefix := "  "
-	if current {
-		prefix = "● "
-	}
-
-	delayStr := ""
-	if d, ok := m.delays[node]; ok {
-		if d > 0 {
-			delayStr = fmt.Sprintf("%dms", d)
-		} else {
-			delayStr = "×"
-		}
-	}
-
-	w := m.contentWidth()
-	nameMax := w - runewidth.StringWidth(prefix)
-	if delayStr != "" {
-		nameMax -= runewidth.StringWidth(delayStr) + 2
-	}
-	if nameMax < 4 {
-		nameMax = 4
-	}
-
-	line := prefix + truncateRunewidth(node, nameMax)
-	if delayStr != "" {
-		pad := w - runewidth.StringWidth(line) - runewidth.StringWidth(delayStr)
-		if pad < 1 {
-			pad = 1
-		}
-		line += strings.Repeat(" ", pad) + delayStr
-	}
-
-	switch {
-	case active:
-		return activeItem.Render(line)
-	case current:
-		return currentItem.Render(line)
-	default:
-		return normalItem.Render(line)
-	}
 }
 
 func truncateRunewidth(s string, max int) string {
@@ -844,6 +1163,35 @@ func formatTraffic(n int64) string {
 	}
 }
 
+func renderUsageBar(used, total int64, width int) string {
+	if total <= 0 || width < 3 {
+		return ""
+	}
+	ratio := float64(used) / float64(total)
+	if ratio > 1 {
+		ratio = 1
+	}
+	filled := int(ratio * float64(width))
+	if filled < 0 {
+		filled = 0
+	}
+	if filled > width {
+		filled = width
+	}
+
+	var b strings.Builder
+	filledStyle := barFilledLow
+	if ratio > 0.9 {
+		filledStyle = barFilledHigh
+	} else if ratio > 0.7 {
+		filledStyle = barFilledMid
+	}
+
+	b.WriteString(filledStyle.Render(strings.Repeat("█", filled)))
+	b.WriteString(barEmpty.Render(strings.Repeat("░", width-filled)))
+	return b.String()
+}
+
 func maskURL(url string) string {
 	if url == "" {
 		return "-"
@@ -852,44 +1200,6 @@ func maskURL(url string) string {
 		return url
 	}
 	return url[:16] + "..." + url[len(url)-8:]
-}
-
-func (m Model) View() string {
-	if m.screen == screenSubInput {
-		return m.viewSubInput()
-	}
-	return m.viewMain()
-}
-
-func (m Model) viewSubInput() string {
-	var b strings.Builder
-	b.WriteString(titleStyle.Render("输入订阅地址"))
-	b.WriteString("\n\n")
-	b.WriteString(dimStyle.Render("粘贴订阅链接，回车保存，Esc 取消"))
-	b.WriteString("\n\n")
-	b.WriteString(inputStyle.Render(m.subInput.View()))
-	b.WriteString("\n\n")
-	b.WriteString(helpStyle.Render("Enter 保存   Esc 取消"))
-	b.WriteString("\n")
-	return b.String()
-}
-
-func (m Model) viewMain() string {
-	view := m.renderHeader() + m.renderNodeList() + m.renderFooter()
-	if m.height <= 0 {
-		return view
-	}
-	if total := lineCount(view); total < m.height {
-		view += strings.Repeat("\n", m.height-total)
-	}
-	return view
-}
-
-func minInt(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
 }
 
 func modeLabel(mode string) string {
@@ -919,13 +1229,6 @@ func nextMode(current string) string {
 	default:
 		return "rule"
 	}
-}
-
-func emptyDash(s string) string {
-	if s == "" {
-		return "-"
-	}
-	return s
 }
 
 func Run(paths config.Paths, runner *core.Runner, client *api.Client, appVersion, binName string) error {
