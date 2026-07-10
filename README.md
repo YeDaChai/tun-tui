@@ -13,13 +13,13 @@ sudo tun-tui
 
 **Windows / 手动安装：** 到 [Releases](https://github.com/YeDaChai/tun-tui/releases) 下载对应压缩包，解压后以管理员身份运行。
 
-| 平台 | 文件 |
-|------|------|
-| macOS Apple Silicon | `*-macos-arm64.tar.gz` |
-| macOS Intel | `*-macos-amd64.tar.gz` |
-| Linux x64 | `*-linux-amd64.tar.gz` |
-| Linux ARM | `*-linux-arm64.tar.gz` |
-| Windows | `*-windows-amd64.zip` |
+| 你的电脑 | 下载文件 |
+|----------|----------|
+| Mac M1 / M2 / M3 / M4 | `*-macos-apple-silicon.tar.gz` |
+| Mac Intel 芯片 | `*-macos-intel.tar.gz` |
+| Linux 普通电脑 | `*-linux-x86_64.tar.gz` |
+| Linux ARM（树莓派等） | `*-linux-arm64.tar.gz` |
+| Windows 64 位 | `*-windows-x86_64.zip` |
 
 macOS 若提示无法验证：运行 `xattr -d com.apple.quarantine ./tun-tui`
 
@@ -47,6 +47,6 @@ make run        # 运行（需 sudo）
 make release    # 打包到 dist/
 ```
 
-发布：`git tag v0.1.0 && git push origin v0.1.0`
+发布：`git tag v0.1.1 && git push origin v0.1.1`
 
 MIT

@@ -47,12 +47,22 @@ detect_platform() {
 	esac
 
 	case "$arch" in
-	x86_64 | amd64) platform_arch=amd64 ;;
-	arm64 | aarch64) platform_arch=arm64 ;;
+	x86_64 | amd64)
+		case "$platform_os" in
+		macos) platform_label=intel ;;
+		*) platform_label=x86_64 ;;
+		esac
+		;;
+	arm64 | aarch64)
+		case "$platform_os" in
+		macos) platform_label=apple-silicon ;;
+		*) platform_label=arm64 ;;
+		esac
+		;;
 	*) die "不支持的 CPU 架构: $arch" ;;
 	esac
 
-	printf '%s-%s' "$platform_os" "$platform_arch"
+	printf '%s-%s' "$platform_os" "$platform_label"
 }
 
 resolve_install_dir() {

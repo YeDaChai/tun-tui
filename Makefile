@@ -3,7 +3,7 @@
 .PHONY: build build-all release run install clean help
 
 APP      := tun-tui
-VERSION  ?= 0.1.0
+VERSION  ?= 0.1.1
 COMMIT   := $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 DATE     := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 MODULE   := tun-tui
@@ -72,11 +72,11 @@ release: build-all
 		os=$${p%/*}; arch=$${p#*/}; \
 		ext=; [ "$$os" = windows ] && ext=.exe; \
 		case "$$os/$$arch" in \
-			darwin/arm64)  label=macos-arm64 ;; \
-			darwin/amd64)  label=macos-amd64 ;; \
-			linux/amd64)   label=linux-amd64 ;; \
+			darwin/arm64)  label=macos-apple-silicon ;; \
+			darwin/amd64)  label=macos-intel ;; \
+			linux/amd64)   label=linux-x86_64 ;; \
 			linux/arm64)   label=linux-arm64 ;; \
-			windows/amd64) label=windows-amd64 ;; \
+			windows/amd64) label=windows-x86_64 ;; \
 			*)             label=$$os-$$arch ;; \
 		esac; \
 		name=$(APP)-$(VERSION)-$$label; \
@@ -127,4 +127,4 @@ help:
 	@echo "  本机: bin/$(APP)$(BIN_EXT)"
 	@echo "  全平台: bin/$(APP)-<os>-<arch>[.exe]"
 	@echo "  发布包: dist/$(APP)-<version>-<platform>.tar.gz|.zip"
-	@echo "          例: $(APP)-$(VERSION)-macos-arm64.tar.gz"
+	@echo "          例: $(APP)-$(VERSION)-macos-apple-silicon.tar.gz"
