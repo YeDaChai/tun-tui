@@ -11,7 +11,7 @@ import (
 var defaultConfig []byte
 
 const subscriptionExample = `# 把机场订阅链接粘贴到 subscription.url 文件中
-# 或在 TUI 中按 i 输入
+# 或在 TUI 中按 l 管理
 https://your-subscription-url-here
 `
 

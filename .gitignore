@@ -8,6 +8,7 @@ data/cache.db
 data/mihomo.log
 data/providers/
 data/subscription.url
+data/subscription.links
 data/mode
 data/geoip.metadb
 data/geoip.metadb.download
