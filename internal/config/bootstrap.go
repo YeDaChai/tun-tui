@@ -10,8 +10,9 @@ import (
 //go:embed default_config.yaml
 var defaultConfig []byte
 
-const subscriptionExample = `# 把机场订阅链接粘贴到 subscription.url 文件中
-# 或在 TUI 中按 l 管理
+const subscriptionExample = `# 订阅链接示例
+# 推荐在 TUI 中按 l 管理多个链接（写入 subscription.links）
+# 也可把单个链接粘贴到下一行（写入 subscription.url）
 https://your-subscription-url-here
 `
 
