@@ -20,8 +20,10 @@ LDFLAGS  := -s -w \
 BIN_DIR  := bin
 DIST_DIR := dist
 
-# macOS TUN 依赖 gVisor；Linux/Windows 使用系统栈
+# macOS / Windows TUN 使用 gVisor 用户态栈；Linux 使用 system 栈
 ifeq ($(GOOS),darwin)
+BUILD_TAGS := with_gvisor
+else ifeq ($(GOOS),windows)
 BUILD_TAGS := with_gvisor
 else
 BUILD_TAGS :=
@@ -66,7 +68,7 @@ build-all:
 			windows/amd64) label=windows-x86_64 ;; \
 			*)             label=$$os-$$arch ;; \
 		esac; \
-		tags=; [ "$$os" = darwin ] && tags="-tags with_gvisor"; \
+		tags=; [ "$$os" = darwin ] || [ "$$os" = windows ] && tags="-tags with_gvisor"; \
 		echo ">> build $$label$$([ -n "$$tags" ] && echo " [with_gvisor]" || echo "")"; \
 		GOOS=$$os GOARCH=$$arch go build $$tags -ldflags "$(LDFLAGS)" \
 			-o $(BIN_DIR)/$(APP)-$$label$$ext ./cmd/app/ || exit 1; \

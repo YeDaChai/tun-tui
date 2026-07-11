@@ -12,18 +12,18 @@ import (
 )
 
 func TunBuildReady() bool {
-	switch runtime.GOOS {
-	case "linux", "windows":
+	if runtime.GOOS == "linux" {
 		return true
-	default:
-		return features.WithGVisor
 	}
+	return features.WithGVisor
 }
 
 func TunBuildHint() string {
 	switch runtime.GOOS {
 	case "darwin":
 		return "macOS TUN 需要 gVisor，请执行: make build"
+	case "windows":
+		return "Windows TUN 需要 gVisor，请使用官方 Release 或执行: make build GOOS=windows"
 	default:
 		return "TUN 不可用，请重新编译"
 	}
@@ -62,6 +62,9 @@ func verifyTunStarted(dataDir string, offset int64) error {
 		}
 		if strings.Contains(line, "operation not permitted") {
 			return fmt.Errorf("VPN 需要管理员权限，请以 root / 管理员身份运行")
+		}
+		if strings.Contains(line, "gVisor is not included") {
+			return fmt.Errorf("当前版本未包含 gVisor，请下载最新 Release 或重新编译")
 		}
 		if idx := strings.Index(line, "msg=\""); idx >= 0 {
 			msg := line[idx+5:]
