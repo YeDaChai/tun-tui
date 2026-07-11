@@ -69,7 +69,11 @@ func defaultUserDataDir() (string, error) {
 	case "darwin":
 		dir = filepath.Join(home, "Library", "Application Support", "tun-tui")
 	case "windows":
-		dir = filepath.Join(home, "AppData", "Roaming", "tun-tui")
+		if appdata := os.Getenv("APPDATA"); appdata != "" {
+			dir = filepath.Join(appdata, "tun-tui")
+		} else {
+			dir = filepath.Join(home, "AppData", "Roaming", "tun-tui")
+		}
 	default:
 		if xdg := os.Getenv("XDG_DATA_HOME"); xdg != "" {
 			dir = filepath.Join(xdg, "tun-tui")

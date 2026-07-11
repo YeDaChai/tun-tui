@@ -10,8 +10,16 @@ import (
 	"tun-tui/internal/config"
 )
 
+type linkMsg struct {
+	added   bool
+	deleted bool
+	err     error
+	status  string
+	refresh bool
+}
+
 func (m Model) openLinkScreen() Model {
-	urls, active, _ := config.LoadSubscriptionLinks(m.paths.DataDir)
+	urls, active, err := config.LoadSubscriptionLinks(m.paths.DataDir)
 	m.screen = screenLinkList
 	m.linkURLs = urls
 	m.linkActive = active
@@ -28,7 +36,11 @@ func (m Model) openLinkScreen() Model {
 		m.linkInput.Blur()
 	}
 	m.clampLinkScroll()
-	m.err = ""
+	if err != nil {
+		m.err = err.Error()
+	} else {
+		m.err = ""
+	}
 	return m
 }
 
@@ -129,16 +141,12 @@ func (m Model) selectLink(index int) tea.Cmd {
 			return msg
 		}
 
-		if err := m.runner.Reload(); err != nil {
+		status, err := reloadAndSyncMode(m.runner, m.api, m.paths.DataDir)
+		if err != nil {
 			msg.err = err
-			msg.status = "重载失败"
+			msg.status = status
 			msg.refresh = false
 			return msg
-		}
-		mode := config.LoadMode(m.paths.DataDir, "rule")
-		if err := m.api.PatchMode(mode); err != nil {
-			msg.err = err
-			msg.status = "模式同步失败"
 		}
 		return msg
 	}
@@ -154,12 +162,9 @@ func (m Model) addLink(url string) tea.Cmd {
 			return linkMsg{added: true}
 		}
 
-		if err := m.runner.Reload(); err != nil {
-			return linkMsg{added: true, err: err, status: "重载失败"}
-		}
-		mode := config.LoadMode(m.paths.DataDir, "rule")
-		if err := m.api.PatchMode(mode); err != nil {
-			return linkMsg{added: true, err: err, status: "模式同步失败"}
+		status, err := reloadAndSyncMode(m.runner, m.api, m.paths.DataDir)
+		if err != nil {
+			return linkMsg{added: true, err: err, status: status}
 		}
 		return linkMsg{added: true, status: "已添加并应用", refresh: true}
 	}
@@ -172,137 +177,20 @@ func (m Model) deleteLink(index int) tea.Cmd {
 			return linkMsg{err: err}
 		}
 
-		urls, _, _ := config.LoadSubscriptionLinks(m.paths.DataDir)
+		urls, _, err := config.LoadSubscriptionLinks(m.paths.DataDir)
+		if err != nil {
+			return linkMsg{deleted: true, err: err, status: "已删除链接"}
+		}
 		if !m.running || !wasActive || len(urls) == 0 {
 			return linkMsg{deleted: true, status: "已删除链接"}
 		}
 
-		if err := m.runner.Reload(); err != nil {
-			return linkMsg{deleted: true, err: err, status: "重载失败"}
-		}
-		mode := config.LoadMode(m.paths.DataDir, "rule")
-		if err := m.api.PatchMode(mode); err != nil {
-			return linkMsg{deleted: true, err: err, status: "模式同步失败"}
+		status, syncErr := reloadAndSyncMode(m.runner, m.api, m.paths.DataDir)
+		if syncErr != nil {
+			return linkMsg{deleted: true, err: syncErr, status: status}
 		}
 		return linkMsg{deleted: true, status: "已删除并应用", refresh: true}
 	}
-}
-
-type linkMsg struct {
-	added   bool
-	deleted bool
-	err     error
-	status  string
-	refresh bool
-}
-
-func (m *Model) moveLinkCursor(delta int) {
-	if len(m.linkURLs) == 0 {
-		return
-	}
-	m.linkCursor += delta
-	if m.linkCursor < 0 {
-		m.linkCursor = 0
-	}
-	if m.linkCursor >= len(m.linkURLs) {
-		m.linkCursor = len(m.linkURLs) - 1
-	}
-	m.clampLinkScroll()
-}
-
-func (m *Model) scrollLinkRows(delta int) {
-	if len(m.linkURLs) == 0 {
-		return
-	}
-	vp := m.linkViewport()
-	m.linkRowOffset += delta
-	if m.linkRowOffset < 0 {
-		m.linkRowOffset = 0
-	}
-	maxOffset := len(m.linkURLs) - vp.visibleRows
-	if maxOffset < 0 {
-		maxOffset = 0
-	}
-	if m.linkRowOffset > maxOffset {
-		m.linkRowOffset = maxOffset
-	}
-}
-
-func (m *Model) clampLinkScroll() {
-	if len(m.linkURLs) == 0 {
-		m.linkCursor = 0
-		m.linkRowOffset = 0
-		return
-	}
-	if m.linkCursor >= len(m.linkURLs) {
-		m.linkCursor = len(m.linkURLs) - 1
-	}
-	if m.linkCursor < 0 {
-		m.linkCursor = 0
-	}
-	vp := m.linkViewport()
-	if m.linkCursor < m.linkRowOffset {
-		m.linkRowOffset = m.linkCursor
-	}
-	if m.linkCursor >= m.linkRowOffset+vp.visibleRows {
-		m.linkRowOffset = m.linkCursor - vp.visibleRows + 1
-	}
-	maxOffset := len(m.linkURLs) - vp.visibleRows
-	if maxOffset < 0 {
-		maxOffset = 0
-	}
-	if m.linkRowOffset > maxOffset {
-		m.linkRowOffset = maxOffset
-	}
-}
-
-func (m Model) linkListBudget() int {
-	if m.height <= 0 {
-		return 6
-	}
-	// title(1) + divider(1) + blank(2) + input box(3) + hints(2) + keys(1)
-	used := 10
-	budget := m.height - used
-	if budget < 2 {
-		return 2
-	}
-	return budget
-}
-
-func (m Model) linkViewport() struct {
-	visibleRows   int
-	showUpArrow   bool
-	showDownArrow bool
-	endIdx        int
-} {
-	budget := m.linkListBudget()
-	showUp := m.linkRowOffset > 0
-	arrows := 0
-	if showUp {
-		arrows++
-	}
-	maxVisible := budget - arrows
-	if maxVisible < 1 {
-		maxVisible = 1
-	}
-	showDown := m.linkRowOffset+maxVisible < len(m.linkURLs)
-	if showDown {
-		arrows++
-	}
-	visible := budget - arrows
-	if visible < 1 {
-		visible = 1
-	}
-	endIdx := m.linkRowOffset + visible
-	if endIdx > len(m.linkURLs) {
-		endIdx = len(m.linkURLs)
-	}
-	return struct {
-		visibleRows   int
-		showUpArrow   bool
-		showDownArrow bool
-		endIdx        int
-	}{visible, showUp, showDown, endIdx}
 }
 
 func (m Model) viewLinkScreen() string {

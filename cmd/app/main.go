@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -72,15 +73,10 @@ func main() {
 		_ = runner.Stop()
 	}()
 
-	sigCh := make(chan os.Signal, 2)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
-	go func() {
-		<-sigCh
-		_ = runner.Stop()
-		os.Exit(0)
-	}()
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	defer stop()
 
-	if err := ui.Run(paths, runner, client, version.String(), binName); err != nil {
+	if err := ui.Run(ctx, paths, runner, client, version.String(), binName); err != nil {
 		fmt.Fprintf(os.Stderr, "ui error: %v\n", err)
 		os.Exit(1)
 	}

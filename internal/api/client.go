@@ -1,8 +1,10 @@
 package api
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -80,13 +82,7 @@ func (e *HTTPError) Error() string {
 
 func isTransientProxyErr(err error) bool {
 	var he *HTTPError
-	if err == nil {
-		return false
-	}
-	if e, ok := err.(*HTTPError); ok {
-		he = e
-	}
-	if he != nil {
+	if errors.As(err, &he) {
 		return he.StatusCode == http.StatusNotFound || he.StatusCode == http.StatusBadRequest
 	}
 	s := err.Error()
@@ -178,31 +174,31 @@ func (c *Client) SyncGlobalFromProxy() error {
 // SyncGlobalFromProxyRetry waits briefly for provider nodes, then syncs GLOBAL.
 // Transient 400/404 during warm-up are ignored so mode switching still works.
 func (c *Client) SyncGlobalFromProxyRetry() error {
-	var last error
 	for i := 0; i < 10; i++ {
 		err := c.SyncGlobalFromProxy()
-		if err == nil {
-			proxies, perr := c.Proxies()
-			if perr != nil {
-				return nil
+		if err != nil {
+			if isTransientProxyErr(err) {
+				time.Sleep(300 * time.Millisecond)
+				continue
 			}
-			proxy, ok := proxies.Proxies[DefaultProxyGroup]
-			if !ok || proxy.Now == "" {
-				return nil
-			}
-			global, ok := proxies.Proxies[GlobalProxyGroup]
-			if !ok || global.Now == proxy.Now || !proxyGroupHasNode(global, proxy.Now) {
-				return nil
-			}
-			last = fmt.Errorf("GLOBAL still out of sync")
-		} else if isTransientProxyErr(err) {
-			last = err
-		} else {
 			return err
+		}
+
+		proxies, perr := c.Proxies()
+		if perr != nil {
+			return nil
+		}
+		proxy, ok := proxies.Proxies[DefaultProxyGroup]
+		if !ok || proxy.Now == "" {
+			return nil
+		}
+		global, ok := proxies.Proxies[GlobalProxyGroup]
+		if !ok || global.Now == proxy.Now || !proxyGroupHasNode(global, proxy.Now) {
+			return nil
 		}
 		time.Sleep(300 * time.Millisecond)
 	}
-	_ = last
+	// Warm-up may still be in progress; don't fail the mode switch.
 	return nil
 }
 
@@ -215,6 +211,7 @@ func (c *Client) PatchMode(mode string) error {
 	return err
 }
 
+// Traffic reads one snapshot from the streaming /traffic endpoint.
 func (c *Client) Traffic() (Traffic, error) {
 	req, err := http.NewRequest(http.MethodGet, c.base+"/traffic", nil)
 	if err != nil {
@@ -224,24 +221,42 @@ func (c *Client) Traffic() (Traffic, error) {
 		req.Header.Set("Authorization", "Bearer "+c.secret)
 	}
 
-	resp, err := c.http.Do(req)
+	// Streaming endpoint: avoid the shared client timeout so we can read one frame.
+	client := &http.Client{Timeout: 3 * time.Second}
+	resp, err := client.Do(req)
 	if err != nil {
 		return Traffic{}, err
 	}
 	defer resp.Body.Close()
 
-	buf := make([]byte, 4096)
-	n, err := resp.Body.Read(buf)
-	if err != nil && err != io.EOF {
+	if resp.StatusCode >= 400 {
+		return Traffic{}, &HTTPError{
+			Method:     http.MethodGet,
+			Path:       "/traffic",
+			StatusCode: resp.StatusCode,
+			Status:     resp.Status,
+		}
+	}
+
+	line, err := bufio.NewReader(resp.Body).ReadBytes('\n')
+	if err != nil && !errors.Is(err, io.EOF) {
 		return Traffic{}, err
+	}
+	line = bytes.TrimSpace(line)
+	if len(line) == 0 {
+		return Traffic{}, fmt.Errorf("empty traffic frame")
 	}
 
 	var t Traffic
-	return t, json.Unmarshal(buf[:n], &t)
+	return t, json.Unmarshal(line, &t)
 }
 
 func (c *Client) GroupDelay(group, testURL string) (map[string]uint16, error) {
-	path := fmt.Sprintf("/group/%s/delay?url=%s&timeout=5000", group, testURL)
+	path := fmt.Sprintf(
+		"/group/%s/delay?url=%s&timeout=5000",
+		url.PathEscape(group),
+		url.QueryEscape(testURL),
+	)
 	data, err := c.request(http.MethodGet, path, nil)
 	if err != nil {
 		return nil, err
@@ -262,7 +277,8 @@ func (c *Client) Providers() (ProvidersResponse, error) {
 }
 
 func (c *Client) UpdateProvider(name string) error {
-	req, err := http.NewRequest(http.MethodPut, c.base+"/providers/proxies/"+name, nil)
+	path := "/providers/proxies/" + url.PathEscape(name)
+	req, err := http.NewRequest(http.MethodPut, c.base+path, nil)
 	if err != nil {
 		return err
 	}
@@ -270,7 +286,8 @@ func (c *Client) UpdateProvider(name string) error {
 		req.Header.Set("Authorization", "Bearer "+c.secret)
 	}
 
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := *c.http
+	client.Timeout = 30 * time.Second
 	resp, err := client.Do(req)
 	if err != nil {
 		return err
@@ -279,7 +296,7 @@ func (c *Client) UpdateProvider(name string) error {
 
 	if resp.StatusCode >= 400 {
 		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("api PUT /providers/proxies/%s: %s %s", name, resp.Status, strings.TrimSpace(string(body)))
+		return fmt.Errorf("api PUT %s: %s %s", path, resp.Status, strings.TrimSpace(string(body)))
 	}
 	return nil
 }

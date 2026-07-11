@@ -56,6 +56,9 @@ func applySubscriptionURL(root map[string]any, subURL string) error {
 	return nil
 }
 
+// applyTunSettings overwrites tun / dns / sniffer each run so TUN stays
+// consistent. Treat those sections as app-managed; customize via code, not
+// by editing them in config.yaml (subscription URL and mode are injected separately).
 func applyTunSettings(root map[string]any) {
 	tun, _ := root["tun"].(map[string]any)
 	if tun == nil {
