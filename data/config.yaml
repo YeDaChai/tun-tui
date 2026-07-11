@@ -43,11 +43,14 @@ proxy-groups:
     proxies:
       - DIRECT
 
+# 运行时由程序按内嵌 GeoIP/GeoSite 重写为完整分流规则；此处仅作参考。
 rules:
+  - GEOSITE,private,DIRECT
   - IP-CIDR,192.168.0.0/16,DIRECT,no-resolve
   - IP-CIDR,10.0.0.0/8,DIRECT,no-resolve
   - IP-CIDR,172.16.0.0/12,DIRECT,no-resolve
   - IP-CIDR,127.0.0.0/8,DIRECT,no-resolve
-  - GEOIP,CN,DIRECT
+  - GEOSITE,category-ads-all,REJECT
   - GEOSITE,cn,DIRECT
+  - GEOIP,CN,DIRECT
   - MATCH,PROXY

@@ -30,6 +30,7 @@ func BuildConfigBytes(dataDir, cfgPath string) ([]byte, error) {
 	}
 
 	applyTunSettings(root)
+	applyRoutingRules(root)
 	applyMode(dataDir, root)
 
 	out, err := yaml.Marshal(root)
@@ -56,9 +57,9 @@ func applySubscriptionURL(root map[string]any, subURL string) error {
 	return nil
 }
 
-// applyTunSettings overwrites tun / dns / sniffer each run so TUN stays
-// consistent. Treat those sections as app-managed; customize via code, not
-// by editing them in config.yaml (subscription URL and mode are injected separately).
+// applyTunSettings overwrites tun / dns / sniffer / rules each run so TUN and
+// RULE-mode routing stay consistent with the bundled geo databases. Treat those
+// sections as app-managed.
 func applyTunSettings(root map[string]any) {
 	tun, _ := root["tun"].(map[string]any)
 	if tun == nil {
@@ -147,4 +148,23 @@ func applyTunSettings(root map[string]any) {
 	}
 
 	root["tun"] = tun
+}
+
+// applyRoutingRules installs a Clash/Mihomo-style split rule set that uses the
+// bundled geoip.metadb + geosite.dat (no download). Same idea as Clash Verge /
+// other Meta clients: LAN & CN direct, ads reject, everything else via PROXY.
+func applyRoutingRules(root map[string]any) {
+	root["rules"] = []any{
+		"GEOSITE,private,DIRECT",
+		"IP-CIDR,192.168.0.0/16,DIRECT,no-resolve",
+		"IP-CIDR,10.0.0.0/8,DIRECT,no-resolve",
+		"IP-CIDR,172.16.0.0/12,DIRECT,no-resolve",
+		"IP-CIDR,127.0.0.0/8,DIRECT,no-resolve",
+		"IP-CIDR,224.0.0.0/4,DIRECT,no-resolve",
+		"IP-CIDR,255.255.255.255/32,DIRECT,no-resolve",
+		"GEOSITE,category-ads-all,REJECT",
+		"GEOSITE,cn,DIRECT",
+		"GEOIP,CN,DIRECT",
+		"MATCH,PROXY",
+	}
 }
