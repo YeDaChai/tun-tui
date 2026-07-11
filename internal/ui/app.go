@@ -76,6 +76,7 @@ type Model struct {
 	err             string
 	width           int
 	height          int
+	busy            bool
 }
 
 func Run(ctx context.Context, paths config.Paths, runner *core.Runner, client *api.Client, appVersion, binName string) error {
@@ -223,7 +224,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tickMsg:
 		cmds := []tea.Cmd{tick()}
-		if m.running && m.screen == screenMain {
+		if m.running && m.screen == screenMain && !m.busy {
 			cmds = append(cmds, refresh(m))
 		}
 		return m, tea.Batch(cmds...)
@@ -253,6 +254,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case delayMsg:
+		m.busy = false
 		if msg.err != nil {
 			m.status, m.err = "测速失败", msg.err.Error()
 			return m, nil
@@ -261,6 +263,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case linkMsg:
+		m.busy = false
 		if msg.err != nil {
 			m.err = msg.err.Error()
 		} else {
@@ -304,6 +307,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case actionMsg:
+		m.busy = false
 		if msg.err != nil {
 			m.err = msg.err.Error()
 		} else {
@@ -321,6 +325,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case startMsg:
 		m.starting = false
+		m.busy = false
 		m.running = m.runner.Running()
 		if msg.err != nil {
 			m.err, m.status = msg.err.Error(), "连接失败"
@@ -355,7 +360,7 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "l":
 		return m.openLinkScreen(), textinput.Blink
 	case "s":
-		if m.starting {
+		if m.starting || m.busy {
 			return m, nil
 		}
 		if m.running {
@@ -380,6 +385,10 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.status = "请先连接"
 			return m, nil
 		}
+		if m.busy {
+			return m, nil
+		}
+		m.busy = true
 		m.status = "重载中…"
 		return m, func() tea.Msg {
 			status, err := reloadAndSyncMode(m.runner, m.api, m.paths.DataDir)
@@ -393,6 +402,10 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.status = "请先连接"
 			return m, nil
 		}
+		if m.busy {
+			return m, nil
+		}
+		m.busy = true
 		m.status = "更新中…"
 		return m, func() tea.Msg {
 			if err := m.api.UpdateProvider(config.ProviderName); err != nil {
@@ -405,6 +418,10 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.status = "请先连接"
 			return m, nil
 		}
+		if m.busy {
+			return m, nil
+		}
+		m.busy = true
 		m.status = "测速中…"
 		return m, func() tea.Msg {
 			delays, err := m.api.GroupDelay(m.activeGroup, testURL)
@@ -415,6 +432,10 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.status = "请先连接"
 			return m, nil
 		}
+		if m.busy {
+			return m, nil
+		}
+		m.busy = true
 		next := nextMode(m.mode)
 		m.mode, m.status = next, ""
 		dataDir := m.paths.DataDir
@@ -434,9 +455,10 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.moveCursor(1)
 		return m, nil
 	case "enter":
-		if !m.running || len(m.nodes) == 0 {
+		if !m.running || len(m.nodes) == 0 || m.busy {
 			return m, nil
 		}
+		m.busy = true
 		node := m.nodes[m.cursor]
 		return m, func() tea.Msg {
 			if err := m.api.SelectProxy(m.activeGroup, node); err != nil {
@@ -449,7 +471,7 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) beginConnect() (Model, tea.Cmd) {
-	if m.starting || m.running {
+	if m.starting || m.running || m.busy {
 		return m, nil
 	}
 	if m.subscriptionURL == "" {
@@ -460,7 +482,7 @@ func (m Model) beginConnect() (Model, tea.Cmd) {
 		m.status, m.err = "连接失败", core.TunBuildHint()
 		return m, nil
 	}
-	m.starting, m.status, m.err = true, "连接中…", ""
+	m.starting, m.busy, m.status, m.err = true, true, "连接中…", ""
 	return m, func() tea.Msg {
 		if err := m.runner.Start(); err != nil {
 			return startMsg{err: err}

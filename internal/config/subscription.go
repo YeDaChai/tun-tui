@@ -35,7 +35,7 @@ func LoadSubscriptionLinks(dataDir string) ([]string, int, error) {
 		if os.IsNotExist(err) {
 			if url, legacyErr := loadLegacySubscriptionURL(dataDir); legacyErr == nil && url != "" {
 				if saveErr := SaveSubscriptionLinks(dataDir, []string{url}, 0); saveErr != nil {
-					return []string{url}, 0, nil
+					return nil, -1, saveErr
 				}
 				return []string{url}, 0, nil
 			}
@@ -52,6 +52,9 @@ func SaveSubscriptionLinks(dataDir string, urls []string, active int) error {
 		u = strings.TrimSpace(u)
 		if u == "" {
 			continue
+		}
+		if err := ValidateSubscriptionURL(u); err != nil {
+			return err
 		}
 		clean = append(clean, u)
 	}
@@ -89,8 +92,8 @@ func SaveSubscriptionLinks(dataDir string, urls []string, active int) error {
 
 func AddSubscriptionLink(dataDir, url string) error {
 	url = strings.TrimSpace(url)
-	if url == "" {
-		return fmt.Errorf("订阅地址不能为空")
+	if err := ValidateSubscriptionURL(url); err != nil {
+		return err
 	}
 
 	urls, _, err := LoadSubscriptionLinks(dataDir)

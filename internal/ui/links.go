@@ -72,9 +72,10 @@ func (m Model) updateLinkList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.moveLinkCursor(1)
 		return m, nil
 	case "d":
-		if len(m.linkURLs) == 0 {
+		if len(m.linkURLs) == 0 || m.busy {
 			return m, nil
 		}
+		m.busy = true
 		return m, m.deleteLink(m.linkCursor)
 	case "enter":
 		if len(m.linkURLs) == 0 {
@@ -82,6 +83,10 @@ func (m Model) updateLinkList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.linkInput.Focus()
 			return m, textinput.Blink
 		}
+		if m.busy {
+			return m, nil
+		}
+		m.busy = true
 		return m.closeLinkScreen(), m.selectLink(m.linkCursor)
 	case "ctrl+c":
 		_ = m.runner.Stop()
@@ -102,12 +107,13 @@ func (m Model) updateLinkInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "enter":
 		url := strings.TrimSpace(m.linkInput.Value())
-		if url == "" {
+		if url == "" || m.busy {
 			return m, nil
 		}
 		m.linkInput.SetValue("")
 		m.linkInputFocus = false
 		m.linkInput.Blur()
+		m.busy = true
 		return m, m.addLink(url)
 	case "ctrl+c":
 		_ = m.runner.Stop()
@@ -123,9 +129,9 @@ func (m Model) selectLink(index int) tea.Cmd {
 		if err := config.SetActiveSubscriptionLink(m.paths.DataDir, index); err != nil {
 			return actionMsg{err: err}
 		}
-		msg := actionMsg{status: "已应用链接", refresh: m.running}
+		msg := actionMsg{refresh: m.running}
 		if !m.running {
-			return actionMsg{status: "已选择链接"}
+			return actionMsg{}
 		}
 		if status, err := reloadAndSyncMode(m.runner, m.api, m.paths.DataDir); err != nil {
 			return actionMsg{err: err, status: status}

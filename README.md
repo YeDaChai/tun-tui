@@ -66,6 +66,8 @@ macOS 若提示无法验证：运行 `xattr -d com.apple.quarantine ./tun-tui`
 
 按 `m` 可在 分流 / 全局 / 直连 之间切换。HUD「规则 开」表示地理数据已就绪。
 
+订阅地址仅允许公网 `http/https`；本机/内网地址会被拒绝。本地控制 API 绑定 `127.0.0.1:9090` 并启用随机 secret。
+
 异常退出后无法上网：`sudo tun-tui -cleanup`
 
 ## 开发

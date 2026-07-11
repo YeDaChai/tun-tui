@@ -27,3 +27,8 @@ func chownToSudoUser(path string) error {
 	}
 	return os.Chown(path, uid, gid)
 }
+
+// ChownToSudoUser reassigns ownership after sudo writes so the real user can manage files.
+func ChownToSudoUser(path string) error {
+	return chownToSudoUser(path)
+}

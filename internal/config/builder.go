@@ -8,7 +8,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-func BuildConfigBytes(dataDir, cfgPath string) ([]byte, error) {
+func BuildConfigBytes(dataDir, cfgPath, apiSecret string) ([]byte, error) {
 	data, err := os.ReadFile(cfgPath)
 	if err != nil {
 		return nil, fmt.Errorf("read config: %w", err)
@@ -24,12 +24,16 @@ func BuildConfigBytes(dataDir, cfgPath string) ([]byte, error) {
 		return nil, err
 	}
 	if subURL != "" {
+		if err := ValidateSubscriptionURL(subURL); err != nil {
+			return nil, fmt.Errorf("订阅地址不安全: %w", err)
+		}
 		if err := applySubscriptionURL(root, subURL); err != nil {
 			return nil, err
 		}
 	}
 
 	applyTunSettings(root)
+	applyController(root, apiSecret)
 	applyRoutingRules(root)
 	applyMode(dataDir, root)
 
@@ -51,10 +55,20 @@ func applySubscriptionURL(root map[string]any, subURL string) error {
 		return fmt.Errorf("config.yaml 缺少 proxy-providers.%s 配置", ProviderName)
 	}
 
+	provider["type"] = "http"
+	provider["path"] = "./providers/subscription.yaml"
 	provider["url"] = subURL
 	providers[ProviderName] = provider
 	root["proxy-providers"] = providers
 	return nil
+}
+
+func applyController(root map[string]any, secret string) {
+	root["external-controller"] = "127.0.0.1:9090"
+	root["allow-lan"] = false
+	if secret != "" {
+		root["secret"] = secret
+	}
 }
 
 // applyTunSettings overwrites tun / dns / sniffer / rules each run so TUN and
@@ -141,6 +155,8 @@ func applyTunSettings(root map[string]any) {
 			if hc["url"] == nil {
 				hc["url"] = "https://www.gstatic.com/generate_204"
 			}
+			sub["type"] = "http"
+			sub["path"] = "./providers/subscription.yaml"
 			sub["health-check"] = hc
 			providers[ProviderName] = sub
 			root["proxy-providers"] = providers

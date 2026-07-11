@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -29,12 +30,13 @@ type Runner struct {
 	running  bool
 	dataDir  string
 	cfgPath  string
+	secret   string
 	logFile  *os.File
 	logReady bool
 }
 
-func NewRunner(dataDir, cfgPath string) *Runner {
-	return &Runner{dataDir: dataDir, cfgPath: cfgPath}
+func NewRunner(dataDir, cfgPath, secret string) *Runner {
+	return &Runner{dataDir: dataDir, cfgPath: cfgPath, secret: secret}
 }
 
 func (r *Runner) Running() bool {
@@ -122,7 +124,9 @@ func (r *Runner) prepareConfig() ([]byte, error) {
 	if err := geodata.Install(r.dataDir); err != nil {
 		return nil, fmt.Errorf("install geodata: %w", err)
 	}
-	return config.BuildConfigBytes(r.dataDir, r.cfgPath)
+	_ = config.ChownToSudoUser(filepath.Join(r.dataDir, "geoip.metadb"))
+	_ = config.ChownToSudoUser(filepath.Join(r.dataDir, "geosite.dat"))
+	return config.BuildConfigBytes(r.dataDir, r.cfgPath, r.secret)
 }
 
 func syncTunnelMode(dataDir string) {
@@ -137,10 +141,11 @@ func (r *Runner) setupLogging() error {
 		return nil
 	}
 	path := filepath.Join(r.dataDir, "mihomo.log")
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("open log file: %w", err)
 	}
+	_ = config.ChownToSudoUser(path)
 	logrus.SetOutput(f)
 	mihomolog.SetLevel(mihomolog.WARNING)
 	r.logFile = f
@@ -189,6 +194,27 @@ func verifyTunStarted(dataDir string, offset int64) error {
 	}
 	time.Sleep(300 * time.Millisecond)
 
+	if err := scanTunStartErrors(dataDir, offset); err != nil {
+		return err
+	}
+
+	// Positive check: external controller must accept connections.
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		conn, err := net.DialTimeout("tcp", "127.0.0.1:9090", 200*time.Millisecond)
+		if err == nil {
+			_ = conn.Close()
+			return nil
+		}
+		if err := scanTunStartErrors(dataDir, offset); err != nil {
+			return err
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	return fmt.Errorf("内核未响应控制端口 9090，启动可能失败；详见 mihomo.log")
+}
+
+func scanTunStartErrors(dataDir string, offset int64) error {
 	data, err := os.ReadFile(filepath.Join(dataDir, "mihomo.log"))
 	if err != nil || int64(len(data)) <= offset {
 		return nil

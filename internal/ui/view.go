@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -64,7 +65,6 @@ func (m Model) View() string {
 func (m Model) viewMain() string {
 	var b strings.Builder
 	b.WriteString(m.renderHUD())
-	b.WriteString("\n")
 	b.WriteString(m.renderProxyPanel())
 	b.WriteString(m.renderFooter())
 	if m.height > 0 {
@@ -417,11 +417,11 @@ func maskURL(raw string) string {
 	if raw == "" {
 		return "-"
 	}
-	r := []rune(raw)
-	if len(r) <= 24 {
-		return raw
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return "(无效地址)"
 	}
-	return string(r[:16]) + "..." + string(r[len(r)-8:])
+	return u.Scheme + "://" + u.Host + "/…"
 }
 
 func modeLabel(mode string) string {
@@ -497,7 +497,7 @@ func (m Model) listBudget() int {
 	if m.err != "" {
 		used++
 	}
-	used += 5 + 3 // panel chrome + footer
+	used += 4 + 3 // panel chrome + footer
 	b := m.height - used
 	if b < 1 {
 		return 1

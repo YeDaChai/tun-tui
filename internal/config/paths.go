@@ -18,6 +18,7 @@ type Paths struct {
 	DataDir    string
 	ConfigFile string
 	APIBase    string
+	APISecret  string
 }
 
 func ResolvePaths(dataDirFlag string) (Paths, error) {
@@ -28,10 +29,15 @@ func ResolvePaths(dataDirFlag string) (Paths, error) {
 	if err := bootstrap(dataDir); err != nil {
 		return Paths{}, err
 	}
+	secret, err := LoadOrCreateAPISecret(dataDir)
+	if err != nil {
+		return Paths{}, err
+	}
 	return Paths{
 		DataDir:    dataDir,
 		ConfigFile: filepath.Join(dataDir, "config.yaml"),
 		APIBase:    "http://127.0.0.1:9090",
+		APISecret:  secret,
 	}, nil
 }
 
@@ -88,17 +94,24 @@ func bootstrap(dataDir string) error {
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return fmt.Errorf("create data dir: %w", err)
 	}
+	_ = chownToSudoUser(dataDir)
 	if err := os.MkdirAll(filepath.Join(dataDir, "providers"), 0o755); err != nil {
 		return fmt.Errorf("create providers dir: %w", err)
 	}
+	_ = chownToSudoUser(filepath.Join(dataDir, "providers"))
+
 	cfgPath := filepath.Join(dataDir, "config.yaml")
 	if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
-		if err := os.WriteFile(cfgPath, defaultConfig, 0o644); err != nil {
+		if err := os.WriteFile(cfgPath, defaultConfig, 0o600); err != nil {
 			return fmt.Errorf("write default config: %w", err)
 		}
 	}
+	_ = chownToSudoUser(cfgPath)
+
 	if err := geodata.Install(dataDir); err != nil {
 		return fmt.Errorf("install bundled geodata: %w", err)
 	}
+	_ = chownToSudoUser(filepath.Join(dataDir, "geoip.metadb"))
+	_ = chownToSudoUser(filepath.Join(dataDir, "geosite.dat"))
 	return nil
 }

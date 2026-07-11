@@ -10,6 +10,7 @@ data/providers/
 data/subscription.url
 data/subscription.links
 data/mode
+data/api.secret
 data/geoip.metadb
 data/geoip.metadb.download
 data/geosite.dat
