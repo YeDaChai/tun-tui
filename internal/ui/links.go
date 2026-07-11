@@ -21,8 +21,7 @@ type linkMsg struct {
 func (m Model) openLinkScreen() Model {
 	urls, active, err := config.LoadSubscriptionLinks(m.paths.DataDir)
 	m.screen = screenLinkList
-	m.linkURLs = urls
-	m.linkActive = active
+	m.linkURLs, m.linkActive = urls, active
 	m.linkCursor = 0
 	if active >= 0 && active < len(urls) {
 		m.linkCursor = active
@@ -62,26 +61,21 @@ func (m Model) updateLinkList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "esc", "l":
 		return m.closeLinkScreen(), nil
-
 	case "i", "a":
 		m.linkInputFocus = true
 		m.linkInput.Focus()
 		return m, textinput.Blink
-
 	case "k", "up":
 		m.moveLinkCursor(-1)
 		return m, nil
-
 	case "j", "down":
 		m.moveLinkCursor(1)
 		return m, nil
-
 	case "d":
 		if len(m.linkURLs) == 0 {
 			return m, nil
 		}
 		return m, m.deleteLink(m.linkCursor)
-
 	case "enter":
 		if len(m.linkURLs) == 0 {
 			m.linkInputFocus = true
@@ -89,7 +83,6 @@ func (m Model) updateLinkList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, textinput.Blink
 		}
 		return m.closeLinkScreen(), m.selectLink(m.linkCursor)
-
 	case "ctrl+c":
 		_ = m.runner.Stop()
 		return m, tea.Quit
@@ -107,7 +100,6 @@ func (m Model) updateLinkInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.linkInput.Blur()
 		m.linkInput.SetValue("")
 		return m, nil
-
 	case "enter":
 		url := strings.TrimSpace(m.linkInput.Value())
 		if url == "" {
@@ -117,12 +109,10 @@ func (m Model) updateLinkInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.linkInputFocus = false
 		m.linkInput.Blur()
 		return m, m.addLink(url)
-
 	case "ctrl+c":
 		_ = m.runner.Stop()
 		return m, tea.Quit
 	}
-
 	var cmd tea.Cmd
 	m.linkInput, cmd = m.linkInput.Update(msg)
 	return m, cmd
@@ -133,20 +123,12 @@ func (m Model) selectLink(index int) tea.Cmd {
 		if err := config.SetActiveSubscriptionLink(m.paths.DataDir, index); err != nil {
 			return actionMsg{err: err}
 		}
-
 		msg := actionMsg{status: "已应用链接", refresh: m.running}
 		if !m.running {
-			msg.status = "已选择链接"
-			msg.refresh = false
-			return msg
+			return actionMsg{status: "已选择链接"}
 		}
-
-		status, err := reloadAndSyncMode(m.runner, m.api, m.paths.DataDir)
-		if err != nil {
-			msg.err = err
-			msg.status = status
-			msg.refresh = false
-			return msg
+		if status, err := reloadAndSyncMode(m.runner, m.api, m.paths.DataDir); err != nil {
+			return actionMsg{err: err, status: status}
 		}
 		return msg
 	}
@@ -157,13 +139,10 @@ func (m Model) addLink(url string) tea.Cmd {
 		if err := config.AddSubscriptionLink(m.paths.DataDir, url); err != nil {
 			return linkMsg{err: err}
 		}
-
 		if !m.running {
 			return linkMsg{added: true}
 		}
-
-		status, err := reloadAndSyncMode(m.runner, m.api, m.paths.DataDir)
-		if err != nil {
+		if status, err := reloadAndSyncMode(m.runner, m.api, m.paths.DataDir); err != nil {
 			return linkMsg{added: true, err: err, status: status}
 		}
 		return linkMsg{added: true, status: "已添加并应用", refresh: true}
@@ -176,7 +155,6 @@ func (m Model) deleteLink(index int) tea.Cmd {
 		if err := config.DeleteSubscriptionLink(m.paths.DataDir, index); err != nil {
 			return linkMsg{err: err}
 		}
-
 		urls, _, err := config.LoadSubscriptionLinks(m.paths.DataDir)
 		if err != nil {
 			return linkMsg{deleted: true, err: err, status: "已删除链接"}
@@ -184,10 +162,8 @@ func (m Model) deleteLink(index int) tea.Cmd {
 		if !m.running || !wasActive || len(urls) == 0 {
 			return linkMsg{deleted: true, status: "已删除链接"}
 		}
-
-		status, syncErr := reloadAndSyncMode(m.runner, m.api, m.paths.DataDir)
-		if syncErr != nil {
-			return linkMsg{deleted: true, err: syncErr, status: status}
+		if status, err := reloadAndSyncMode(m.runner, m.api, m.paths.DataDir); err != nil {
+			return linkMsg{deleted: true, err: err, status: status}
 		}
 		return linkMsg{deleted: true, status: "已删除并应用", refresh: true}
 	}
@@ -198,80 +174,54 @@ func (m Model) viewLinkScreen() string {
 	if w < 40 {
 		w = 40
 	}
-	f := newPanelFrame(w, true)
-	inner := frameInner(w)
-
+	f := newFrame(w, true)
 	var b strings.Builder
-	b.WriteString(f.top())
-	b.WriteString("\n")
-	b.WriteString(f.rowSpacedLeft(sectionTitle.Render(" 订阅链接 ")))
-	b.WriteString("\n")
-	b.WriteString(f.rowSpacedLeft(dividerStyle.Render(strings.Repeat("─", inner))))
-	b.WriteString("\n")
+	b.WriteString(f.top() + "\n")
+	b.WriteString(f.row(sectionTitle.Render(" 订阅链接 ")) + "\n")
+	b.WriteString(f.row(dividerStyle.Render(strings.Repeat("─", w))) + "\n")
 
 	if len(m.linkURLs) == 0 {
-		b.WriteString(f.rowSpacedLeft(textSubtle.Render("  暂无链接 — 按 i 添加")))
-		b.WriteString("\n")
+		b.WriteString(f.row(textSubtle.Render("  暂无链接 — 按 i 添加")) + "\n")
 	} else {
 		vp := m.linkViewport()
-
-		if vp.showUpArrow {
-			hint := fmt.Sprintf("  △  上方还有 %d 个", m.linkRowOffset)
-			b.WriteString(f.rowSpacedLeft(padVisual(textSubtle.Render(hint), inner)))
-			b.WriteString("\n")
+		if vp.showUp {
+			b.WriteString(f.row(pad(textSubtle.Render(fmt.Sprintf("  △  上方还有 %d 个", m.linkRowOffset)), w)) + "\n")
 		}
-
-		for i := m.linkRowOffset; i < vp.endIdx; i++ {
+		for i := m.linkRowOffset; i < vp.end; i++ {
 			mark := "  "
 			if i == m.linkCursor {
 				mark = "› "
 			} else if i == m.linkActive {
 				mark = "● "
 			}
-			rowStyle := itemNormal
-			fullRow := false
+			style, full := itemNormal, false
 			if i == m.linkCursor {
-				rowStyle = itemSelected
-				fullRow = true
+				style, full = itemSelected, true
 			}
-			item := buildRow(inner, mark, maskURL(m.linkURLs[i]), "", rowStyle, itemNormal, fullRow)
-			b.WriteString(f.rowSpacedLeft(padVisual(item, inner)))
-			b.WriteString("\n")
+			item := buildRow(w, mark, maskURL(m.linkURLs[i]), "", style, itemNormal, full)
+			b.WriteString(f.row(pad(item, w)) + "\n")
 		}
-
-		if vp.showDownArrow {
-			remaining := len(m.linkURLs) - vp.endIdx
-			hint := fmt.Sprintf("  ▽  下方还有 %d 个", remaining)
-			b.WriteString(f.rowSpacedLeft(padVisual(textSubtle.Render(hint), inner)))
-			b.WriteString("\n")
+		if vp.showDown {
+			b.WriteString(f.row(pad(textSubtle.Render(fmt.Sprintf("  ▽  下方还有 %d 个", len(m.linkURLs)-vp.end)), w)) + "\n")
 		}
 	}
 
-	b.WriteString(f.bottom())
-	b.WriteString("\n\n")
-
+	b.WriteString(f.bottom() + "\n\n")
 	if m.linkInputFocus {
-		b.WriteString(textSubtle.Render("  添加订阅链接:"))
+		b.WriteString(textSubtle.Render("  添加订阅链接:") + "\n")
 	} else {
-		b.WriteString(textSubtle.Render("  按 i 添加，按 d 删除选中"))
+		b.WriteString(textSubtle.Render("  按 i 添加，按 d 删除选中") + "\n")
 	}
-	b.WriteString("\n")
-	b.WriteString(inputPanel.Render(m.linkInput.View()))
-	b.WriteString("\n\n")
-
+	b.WriteString(inputPanel.Render(m.linkInput.View()) + "\n\n")
 	if m.err != "" {
-		b.WriteString(textErr.Render("! " + m.err))
-		b.WriteString("\n\n")
+		b.WriteString(textErr.Render("! "+m.err) + "\n\n")
 	}
-
 	b.WriteString(footerKey.Render("↵") + footerLabel.Render(" 使用"))
 	b.WriteString(footerSep.Render("  "))
 	b.WriteString(footerKey.Render("i") + footerLabel.Render(" 添加"))
 	b.WriteString(footerSep.Render("  "))
 	b.WriteString(footerKey.Render("d") + footerLabel.Render(" 删除"))
 	b.WriteString(footerSep.Render("  "))
-	b.WriteString(footerKey.Render("esc") + footerLabel.Render(" 关闭"))
-	b.WriteString("\n")
-
+	b.WriteString(footerKey.Render("esc") + footerLabel.Render(" 关闭") + "\n")
 	return b.String()
 }

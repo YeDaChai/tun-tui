@@ -8,8 +8,7 @@ import (
 )
 
 const (
-	minGeoIPSize    = 1024 * 1024
-	minGeositeSize  = 1024 * 1024
+	MinFileSize     = 1024 * 1024
 	geoIPFileName   = "geoip.metadb"
 	geositeFileName = "geosite.dat"
 )
@@ -25,10 +24,10 @@ func Install(dataDir string) error {
 		return fmt.Errorf("create data dir: %w", err)
 	}
 
-	if err := installFile(dataDir, geoIPFileName, bundledGeoIP, minGeoIPSize); err != nil {
+	if err := installFile(dataDir, geoIPFileName, bundledGeoIP, MinFileSize); err != nil {
 		return err
 	}
-	if err := installFile(dataDir, geositeFileName, bundledGeosite, minGeositeSize); err != nil {
+	if err := installFile(dataDir, geositeFileName, bundledGeosite, MinFileSize); err != nil {
 		return err
 	}
 	return nil
@@ -36,8 +35,8 @@ func Install(dataDir string) error {
 
 // Ready reports whether bundled rule databases are present and usable.
 func Ready(dataDir string) bool {
-	return fileReady(filepath.Join(dataDir, geoIPFileName), minGeoIPSize) &&
-		fileReady(filepath.Join(dataDir, geositeFileName), minGeositeSize)
+	return fileReady(filepath.Join(dataDir, geoIPFileName), MinFileSize) &&
+		fileReady(filepath.Join(dataDir, geositeFileName), MinFileSize)
 }
 
 func fileReady(path string, minSize int64) bool {

@@ -85,8 +85,7 @@ func isTransientProxyErr(err error) bool {
 	if errors.As(err, &he) {
 		return he.StatusCode == http.StatusNotFound || he.StatusCode == http.StatusBadRequest
 	}
-	s := err.Error()
-	return strings.Contains(s, "404") || strings.Contains(s, "400")
+	return false
 }
 
 func (c *Client) Version() (Version, error) {
@@ -174,7 +173,7 @@ func (c *Client) SyncGlobalFromProxy() error {
 // SyncGlobalFromProxyRetry waits briefly for provider nodes, then syncs GLOBAL.
 // Transient 400/404 during warm-up are ignored so mode switching still works.
 func (c *Client) SyncGlobalFromProxyRetry() error {
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 5; i++ {
 		err := c.SyncGlobalFromProxy()
 		if err != nil {
 			if isTransientProxyErr(err) {
@@ -299,4 +298,53 @@ func (c *Client) UpdateProvider(name string) error {
 		return fmt.Errorf("api PUT %s: %s %s", path, resp.Status, strings.TrimSpace(string(body)))
 	}
 	return nil
+}
+
+type Version struct {
+	Meta    bool   `json:"meta"`
+	Version string `json:"version"`
+}
+
+type Configs struct {
+	Mode     string `json:"mode"`
+	LogLevel string `json:"log-level"`
+}
+
+type Proxy struct {
+	Name  string   `json:"name"`
+	Type  string   `json:"type"`
+	Now   string   `json:"now"`
+	All   []string `json:"all"`
+	Alive bool     `json:"alive"`
+}
+
+type ProxiesResponse struct {
+	Proxies map[string]Proxy `json:"proxies"`
+}
+
+type Traffic struct {
+	Up        int64 `json:"up"`
+	Down      int64 `json:"down"`
+	UpTotal   int64 `json:"upTotal"`
+	DownTotal int64 `json:"downTotal"`
+}
+
+type SubscriptionInfo struct {
+	Upload   int64 `json:"upload"`
+	Download int64 `json:"download"`
+	Total    int64 `json:"total"`
+	Expire   int64 `json:"expire"`
+}
+
+type ProxyProvider struct {
+	Name             string            `json:"name"`
+	Type             string            `json:"type"`
+	VehicleType      string            `json:"vehicleType"`
+	Proxies          []Proxy           `json:"proxies"`
+	UpdatedAt        string            `json:"updatedAt"`
+	SubscriptionInfo *SubscriptionInfo `json:"subscriptionInfo"`
+}
+
+type ProvidersResponse struct {
+	Providers map[string]ProxyProvider `json:"providers"`
 }

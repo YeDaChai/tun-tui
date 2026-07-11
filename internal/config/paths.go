@@ -1,12 +1,18 @@
 package config
 
 import (
+	_ "embed"
 	"fmt"
 	"os"
 	"os/user"
 	"path/filepath"
 	"runtime"
+
+	"tun-tui/internal/geodata"
 )
+
+//go:embed default_config.yaml
+var defaultConfig []byte
 
 type Paths struct {
 	DataDir    string
@@ -19,11 +25,9 @@ func ResolvePaths(dataDirFlag string) (Paths, error) {
 	if err != nil {
 		return Paths{}, err
 	}
-
-	if err := Bootstrap(dataDir); err != nil {
+	if err := bootstrap(dataDir); err != nil {
 		return Paths{}, err
 	}
-
 	return Paths{
 		DataDir:    dataDir,
 		ConfigFile: filepath.Join(dataDir, "config.yaml"),
@@ -38,24 +42,12 @@ func resolveDataDir(flagValue string) (string, error) {
 	if env := os.Getenv("TUN_TUI_DATA_DIR"); env != "" {
 		return filepath.Abs(env)
 	}
-
-	if devDir := detectDevDataDir(); devDir != "" {
-		return devDir, nil
+	if cwd, err := os.Getwd(); err == nil {
+		if _, err := os.Stat(filepath.Join(cwd, "data", "config.yaml")); err == nil {
+			return filepath.Join(cwd, "data"), nil
+		}
 	}
-
 	return defaultUserDataDir()
-}
-
-func detectDevDataDir() string {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return ""
-	}
-	candidate := filepath.Join(cwd, "data", "config.yaml")
-	if _, err := os.Stat(candidate); err == nil {
-		return filepath.Join(cwd, "data")
-	}
-	return ""
 }
 
 func defaultUserDataDir() (string, error) {
@@ -63,31 +55,25 @@ func defaultUserDataDir() (string, error) {
 	if err != nil {
 		return "", err
 	}
-
-	var dir string
 	switch runtime.GOOS {
 	case "darwin":
-		dir = filepath.Join(home, "Library", "Application Support", "tun-tui")
+		return filepath.Join(home, "Library", "Application Support", "tun-tui"), nil
 	case "windows":
 		if appdata := os.Getenv("APPDATA"); appdata != "" {
-			dir = filepath.Join(appdata, "tun-tui")
-		} else {
-			dir = filepath.Join(home, "AppData", "Roaming", "tun-tui")
+			return filepath.Join(appdata, "tun-tui"), nil
 		}
+		return filepath.Join(home, "AppData", "Roaming", "tun-tui"), nil
 	default:
 		if xdg := os.Getenv("XDG_DATA_HOME"); xdg != "" {
-			dir = filepath.Join(xdg, "tun-tui")
-		} else {
-			dir = filepath.Join(home, ".local", "share", "tun-tui")
+			return filepath.Join(xdg, "tun-tui"), nil
 		}
+		return filepath.Join(home, ".local", "share", "tun-tui"), nil
 	}
-	return dir, nil
 }
 
 func effectiveHome() (string, error) {
 	if sudoUser := os.Getenv("SUDO_USER"); sudoUser != "" {
-		u, err := user.Lookup(sudoUser)
-		if err == nil && u.HomeDir != "" {
+		if u, err := user.Lookup(sudoUser); err == nil && u.HomeDir != "" {
 			return u.HomeDir, nil
 		}
 	}
@@ -96,4 +82,23 @@ func effectiveHome() (string, error) {
 		return "", fmt.Errorf("resolve home dir: %w", err)
 	}
 	return home, nil
+}
+
+func bootstrap(dataDir string) error {
+	if err := os.MkdirAll(dataDir, 0o755); err != nil {
+		return fmt.Errorf("create data dir: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Join(dataDir, "providers"), 0o755); err != nil {
+		return fmt.Errorf("create providers dir: %w", err)
+	}
+	cfgPath := filepath.Join(dataDir, "config.yaml")
+	if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
+		if err := os.WriteFile(cfgPath, defaultConfig, 0o644); err != nil {
+			return fmt.Errorf("write default config: %w", err)
+		}
+	}
+	if err := geodata.Install(dataDir); err != nil {
+		return fmt.Errorf("install bundled geodata: %w", err)
+	}
+	return nil
 }

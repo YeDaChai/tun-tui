@@ -46,30 +46,6 @@ func LoadSubscriptionLinks(dataDir string) ([]string, int, error) {
 	return parseSubscriptionLinks(data)
 }
 
-func SaveSubscriptionURL(dataDir, url string) error {
-	url = strings.TrimSpace(url)
-	if url == "" {
-		return fmt.Errorf("订阅地址不能为空")
-	}
-
-	urls, _, err := LoadSubscriptionLinks(dataDir)
-	if err != nil {
-		return err
-	}
-
-	active := 0
-	for i, u := range urls {
-		if u == url {
-			active = i
-			return SaveSubscriptionLinks(dataDir, urls, active)
-		}
-	}
-
-	urls = append(urls, url)
-	active = len(urls) - 1
-	return SaveSubscriptionLinks(dataDir, urls, active)
-}
-
 func SaveSubscriptionLinks(dataDir string, urls []string, active int) error {
 	clean := make([]string, 0, len(urls))
 	for _, u := range urls {
