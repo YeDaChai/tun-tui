@@ -15,6 +15,7 @@ import (
 	"tun-tui/internal/api"
 	"tun-tui/internal/config"
 	"tun-tui/internal/core"
+	"tun-tui/internal/geodata"
 )
 
 const testURL = "https://www.gstatic.com/generate_204"
@@ -99,6 +100,10 @@ var (
 			Background(accent).
 			Bold(true).
 			Padding(0, 1)
+
+	rulesOn  = lipgloss.NewStyle().Foreground(ok).Bold(true)
+	rulesOff = lipgloss.NewStyle().Foreground(muted)
+	rulesBad = lipgloss.NewStyle().Foreground(warn).Bold(true)
 )
 
 // ═══════════════════════════════════════════════════════════════
@@ -852,7 +857,31 @@ func (m Model) metaLine() string {
 		label := modeLabel(m.mode)
 		parts = append(parts, modeActive.Render(" "+label+" "))
 	}
+	parts = append(parts, m.rulesStatus())
 	return strings.Join(parts, "  ")
+}
+
+func (m Model) rulesStatus() string {
+	if !m.running {
+		return rulesOff.Render("规则 --")
+	}
+	ready := geodata.Ready(m.paths.DataDir)
+	switch config.NormalizeMode(m.mode) {
+	case "rule":
+		if ready {
+			return rulesOn.Render("规则 开")
+		}
+		return rulesBad.Render("规则缺数据")
+	case "global":
+		return rulesOff.Render("规则 关")
+	case "direct":
+		return rulesOff.Render("规则 关")
+	default:
+		if ready {
+			return rulesOn.Render("规则 开")
+		}
+		return rulesOff.Render("规则 --")
+	}
 }
 
 func (m Model) trafficGauge(width int) string {

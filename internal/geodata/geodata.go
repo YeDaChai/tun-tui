@@ -34,6 +34,17 @@ func Install(dataDir string) error {
 	return nil
 }
 
+// Ready reports whether bundled rule databases are present and usable.
+func Ready(dataDir string) bool {
+	return fileReady(filepath.Join(dataDir, geoIPFileName), minGeoIPSize) &&
+		fileReady(filepath.Join(dataDir, geositeFileName), minGeositeSize)
+}
+
+func fileReady(path string, minSize int64) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.Size() >= minSize
+}
+
 func installFile(dataDir, name string, data []byte, minSize int64) error {
 	if int64(len(data)) < minSize {
 		return fmt.Errorf("bundled %s is too small (%d bytes)", name, len(data))
