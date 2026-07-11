@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -60,10 +61,36 @@ func (c *Client) request(method, path string, body any) ([]byte, error) {
 	}
 
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("api %s %s: %s", method, path, resp.Status)
+		return nil, &HTTPError{Method: method, Path: path, StatusCode: resp.StatusCode, Status: resp.Status}
 	}
 
 	return data, nil
+}
+
+type HTTPError struct {
+	Method     string
+	Path       string
+	StatusCode int
+	Status     string
+}
+
+func (e *HTTPError) Error() string {
+	return fmt.Sprintf("api %s %s: %s", e.Method, e.Path, e.Status)
+}
+
+func isTransientProxyErr(err error) bool {
+	var he *HTTPError
+	if err == nil {
+		return false
+	}
+	if e, ok := err.(*HTTPError); ok {
+		he = e
+	}
+	if he != nil {
+		return he.StatusCode == http.StatusNotFound || he.StatusCode == http.StatusBadRequest
+	}
+	s := err.Error()
+	return strings.Contains(s, "404") || strings.Contains(s, "400")
 }
 
 func (c *Client) Version() (Version, error) {
@@ -103,15 +130,26 @@ func (c *Client) SelectProxy(group, node string) error {
 	if err := c.selectProxy(group, node); err != nil {
 		return err
 	}
+	// GLOBAL may not have subscription nodes yet during provider warm-up.
 	if group == DefaultProxyGroup {
-		return c.selectProxy(GlobalProxyGroup, node)
+		_ = c.selectProxy(GlobalProxyGroup, node)
 	}
 	return nil
 }
 
 func (c *Client) selectProxy(group, node string) error {
-	_, err := c.request(http.MethodPut, "/proxies/"+group, map[string]string{"name": node})
+	path := "/proxies/" + url.PathEscape(group)
+	_, err := c.request(http.MethodPut, path, map[string]string{"name": node})
 	return err
+}
+
+func proxyGroupHasNode(p Proxy, name string) bool {
+	for _, n := range p.All {
+		if n == name {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *Client) SyncGlobalFromProxy() error {
@@ -124,18 +162,54 @@ func (c *Client) SyncGlobalFromProxy() error {
 		return nil
 	}
 	global, ok := proxies.Proxies[GlobalProxyGroup]
-	if ok && global.Now == proxy.Now {
+	if !ok {
+		return nil
+	}
+	if global.Now == proxy.Now {
+		return nil
+	}
+	// Subscription provider still loading — skip and retry later.
+	if !proxyGroupHasNode(global, proxy.Now) {
 		return nil
 	}
 	return c.selectProxy(GlobalProxyGroup, proxy.Now)
 }
 
+// SyncGlobalFromProxyRetry waits briefly for provider nodes, then syncs GLOBAL.
+// Transient 400/404 during warm-up are ignored so mode switching still works.
+func (c *Client) SyncGlobalFromProxyRetry() error {
+	var last error
+	for i := 0; i < 10; i++ {
+		err := c.SyncGlobalFromProxy()
+		if err == nil {
+			proxies, perr := c.Proxies()
+			if perr != nil {
+				return nil
+			}
+			proxy, ok := proxies.Proxies[DefaultProxyGroup]
+			if !ok || proxy.Now == "" {
+				return nil
+			}
+			global, ok := proxies.Proxies[GlobalProxyGroup]
+			if !ok || global.Now == proxy.Now || !proxyGroupHasNode(global, proxy.Now) {
+				return nil
+			}
+			last = fmt.Errorf("GLOBAL still out of sync")
+		} else if isTransientProxyErr(err) {
+			last = err
+		} else {
+			return err
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	_ = last
+	return nil
+}
+
 func (c *Client) PatchMode(mode string) error {
 	mode = strings.ToLower(strings.TrimSpace(mode))
 	if mode == "global" {
-		if err := c.SyncGlobalFromProxy(); err != nil {
-			return err
-		}
+		_ = c.SyncGlobalFromProxyRetry()
 	}
 	_, err := c.request(http.MethodPatch, "/configs", map[string]string{"mode": mode})
 	return err

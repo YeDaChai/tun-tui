@@ -3,7 +3,7 @@
 .PHONY: build build-all release run install clean help fetch-geodata
 
 APP      := tun-tui
-VERSION  ?= 0.1.6
+VERSION  ?= 0.1.7
 COMMIT   := $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 DATE     := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 MODULE   := tun-tui

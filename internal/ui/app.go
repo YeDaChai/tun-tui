@@ -386,6 +386,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.hasSubscription = msg.hasSubscription
 		m.nodes = msg.group.All
 		m.clampListScroll()
+		if config.NormalizeMode(m.mode) == "global" {
+			return m, syncGlobalQuiet(m)
+		}
 		return m, nil
 
 	case delayMsg:
@@ -1338,13 +1341,16 @@ func nextMode(current string) string {
 }
 
 func syncGlobalProxyIfNeeded(m Model) tea.Cmd {
+	return syncGlobalQuiet(m)
+}
+
+func syncGlobalQuiet(m Model) tea.Cmd {
 	return func() tea.Msg {
-		if config.NormalizeMode(config.LoadMode(m.paths.DataDir, "rule")) != "global" {
+		if config.NormalizeMode(config.LoadMode(m.paths.DataDir, "rule")) != "global" &&
+			config.NormalizeMode(m.mode) != "global" {
 			return nil
 		}
-		if err := m.api.SyncGlobalFromProxy(); err != nil {
-			return actionMsg{err: err}
-		}
+		_ = m.api.SyncGlobalFromProxy()
 		return nil
 	}
 }
