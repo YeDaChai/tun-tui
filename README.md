@@ -63,6 +63,6 @@ make run        # 运行（需 sudo）
 make release    # 打包到 dist/
 ```
 
-发布：`git tag v0.1.2 && git push origin v0.1.2`
+发布：`git tag v0.1.5 && git push origin v0.1.5`
 
 MIT

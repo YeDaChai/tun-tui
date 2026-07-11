@@ -5,7 +5,7 @@
 #
 # 可选环境变量:
 #   INSTALL_DIR   安装目录，默认 /usr/local/bin（无权限时自动用 ~/.local/bin）
-#   VERSION       指定版本，如 0.1.0（默认 latest）
+#   VERSION       指定版本，如 0.1.5（默认 latest）
 #   GITHUB_REPO   仓库，默认 YeDaChai/tun-tui
 
 set -eu
