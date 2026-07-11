@@ -124,6 +124,9 @@ func (m Model) metaLine() string {
 	if m.mode != "" {
 		parts = append(parts, textSubtle.Render("模式: ")+modeActive.Render(modeLabel(m.mode)))
 	}
+	if m.nodeCrypto != "" {
+		parts = append(parts, textSubtle.Render("协议: ")+modeActive.Render(m.nodeCrypto))
+	}
 	parts = append(parts, m.rulesStatus())
 	return strings.Join(parts, "  ")
 }

@@ -32,6 +32,7 @@ type refreshMsg struct {
 	group           api.Proxy
 	provider        api.ProxyProvider
 	hasSubscription bool
+	nodeCrypto      string
 	err             error
 }
 type delayMsg struct {
@@ -77,6 +78,7 @@ type Model struct {
 	width           int
 	height          int
 	busy            bool
+	nodeCrypto      string
 }
 
 func Run(ctx context.Context, paths config.Paths, runner *core.Runner, client *api.Client, appVersion, binName string) error {
@@ -178,6 +180,19 @@ func refresh(m Model) tea.Cmd {
 			group:           group,
 			hasSubscription: subURL != "",
 		}
+		if group.Now != "" {
+			apiType := ""
+			if node, ok := proxies.Proxies[group.Now]; ok {
+				apiType = node.Type
+			}
+			fileType, cipher := "", ""
+			if crypto := config.LoadProxyCryptoMap(m.paths.DataDir); crypto != nil {
+				if c, ok := crypto[group.Now]; ok {
+					fileType, cipher = c.Type, c.Cipher
+				}
+			}
+			msg.nodeCrypto = config.FormatProxyCrypto(apiType, fileType, cipher)
+		}
 		if providers, err := m.api.Providers(); err == nil {
 			if p, ok := providers.Providers[config.ProviderName]; ok {
 				msg.provider = p
@@ -243,6 +258,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.group = msg.group
 		m.provider = msg.provider
 		m.hasSubscription = msg.hasSubscription
+		m.nodeCrypto = msg.nodeCrypto
 		m.nodes = msg.group.All
 		m.clampListScroll()
 		if config.NormalizeMode(m.mode) == "global" {
@@ -369,6 +385,7 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.status = "已断开"
 			m.version = ""
 			m.nodes = nil
+			m.nodeCrypto = ""
 			m.provider = api.ProxyProvider{}
 			m.delays = map[string]uint16{}
 			m.rowOffset, m.cursor = 0, 0
