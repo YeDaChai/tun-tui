@@ -21,7 +21,7 @@ var (
 	muted   = lipgloss.Color("#999999") // inactive — secondary labels
 	subtle  = lipgloss.Color("#666666") // chrome / borders (brighter than CC #505050)
 	selBg   = lipgloss.Color("#2A2420") // warm selection wash
-	track   = lipgloss.Color("#404040")
+	track   = lipgloss.Color("#6B7280") // empty usage track — readable on dark bg
 
 	frameBorderActive = lipgloss.NewStyle().Foreground(accent)
 	statusOnline      = lipgloss.NewStyle().Foreground(ok).Bold(true)
@@ -97,10 +97,9 @@ func (m Model) renderHUD() string {
 	f := newFrame(w, false)
 	var b strings.Builder
 	b.WriteString(f.top() + "\n")
-	b.WriteString(f.split(m.connectionLine(), m.metaLine()) + "\n")
-	b.WriteString(f.row(m.trafficLine()) + "\n")
+	b.WriteString(f.row(m.hudPrimaryLine(w)) + "\n")
 	if info := m.provider.SubscriptionInfo; info != nil && info.Total > 0 {
-		b.WriteString(f.row(" "+usageBar(info.Upload+info.Download, info.Total, w-2)) + "\n")
+		b.WriteString(f.row(usageBar(info.Upload+info.Download, info.Total, w)) + "\n")
 	}
 	if m.err != "" {
 		b.WriteString(f.row(textErr.Render("! "+truncate(m.err, w-2))) + "\n")
@@ -120,20 +119,22 @@ func (m Model) connectionLine() string {
 	}
 }
 
-func (m Model) metaLine() string {
-	var parts []string
+func (m Model) hudPrimaryLine(width int) string {
+	parts := []string{m.connectionLine(), m.trafficLine()}
 	if m.mode != "" {
-		parts = append(parts, textSubtle.Render("模式: ")+modeActive.Render(modeLabel(m.mode)))
+		parts = append(parts, textSubtle.Render("模式 ")+modeActive.Render(modeLabel(m.mode)))
 	}
 	if m.nodeCrypto != "" {
-		parts = append(parts, textSubtle.Render("协议: ")+modeActive.Render(m.nodeCrypto))
+		parts = append(parts, textSubtle.Render("协议 ")+modeActive.Render(m.nodeCrypto))
 	}
-	return strings.Join(parts, "  ")
+	sep := textSubtle.Render("  ·  ")
+	line := strings.Join(parts, sep)
+	return truncate(line, width)
 }
 
 func (m Model) trafficLine() string {
 	if !m.running {
-		return textSubtle.Render("↑  --  ↓  --")
+		return textSubtle.Render("↑ --  ↓ --")
 	}
 	return txColor.Render("↑") + " " + formatRate(m.traffic.Up) +
 		textSubtle.Render("  ") +
@@ -238,19 +239,46 @@ func (m Model) renderFooter() string {
 		{"l", "链接"}, {"p", "设置"}, {"s", "连接"}, {"m", "模式"}, {"↑↓", "选择"},
 		{"u", "更新"}, {"t", "测速"}, {"q", "退出"},
 	}
-	parts := make([]string, 0, len(keys))
+	items := make([]string, 0, len(keys))
+	total := 0
 	for _, k := range keys {
-		parts = append(parts, footerKey.Render(k[0])+footerLabel.Render(" "+k[1]))
+		item := footerKey.Render(k[0]) + footerLabel.Render(" "+k[1])
+		items = append(items, item)
+		total += lipgloss.Width(item)
 	}
-	full := strings.Join(parts, footerSep.Render("  "))
-	if lipgloss.Width(full) > w {
-		parts = parts[:0]
-		for _, k := range keys {
-			parts = append(parts, footerKey.Render(k[0])+footerLabel.Render(k[1]))
+	return "\n" + f.bottom() + "\n" + distributeItems(items, total, w)
+}
+
+// distributeItems spreads items across width with even gaps between them.
+func distributeItems(items []string, total, width int) string {
+	if len(items) == 0 || width <= 0 {
+		return ""
+	}
+	if len(items) == 1 {
+		return pad(truncate(items[0], width), width)
+	}
+	gaps := len(items) - 1
+	if total+gaps > width {
+		compact := make([]string, len(items))
+		copy(compact, items)
+		line := strings.Join(compact, footerSep.Render(" "))
+		return pad(truncate(line, width), width)
+	}
+	remain := width - total
+	base := remain / gaps
+	extra := remain % gaps
+	var b strings.Builder
+	for i, item := range items {
+		b.WriteString(item)
+		if i < gaps {
+			g := base
+			if i < extra {
+				g++
+			}
+			b.WriteString(strings.Repeat(" ", g))
 		}
-		full = strings.Join(parts, footerSep.Render(" "))
 	}
-	return "\n" + f.bottom() + "\n " + truncate(full, w)
+	return b.String()
 }
 
 // --- layout helpers ---
@@ -337,21 +365,23 @@ func buildRow(width int, mark, name, delay string, rowStyle, delayStyle lipgloss
 }
 
 func usageBar(used, total int64, width int) string {
-	if total <= 0 || width < 8 {
+	if total <= 0 || width < 12 {
 		return ""
 	}
 	ratio := float64(used) / float64(total)
 	if ratio > 1 {
 		ratio = 1
 	}
-	label := fmt.Sprintf(" %s/%s ", formatBytes(used), formatBytes(total))
-	barW := width - lipgloss.Width(label) - 2
-	if barW < 4 {
-		barW = 4
+	label := textSubtle.Render("用量 ") +
+		fmt.Sprintf("%s / %s", formatBytes(used), formatBytes(total))
+	prefix := textSubtle.Render("  ")
+	avail := width - lipgloss.Width(prefix) - lipgloss.Width(label) - 1
+	if avail < 6 {
+		return truncate(prefix+label, width)
 	}
-	filled := int(ratio * float64(barW))
-	if filled > barW {
-		filled = barW
+	filled := int(ratio * float64(avail))
+	if filled > avail {
+		filled = avail
 	}
 	style := barFull
 	switch {
@@ -360,9 +390,9 @@ func usageBar(used, total int64, width int) string {
 	case ratio > 0.7:
 		style = barWarning
 	}
-	return style.Render(strings.Repeat("─", filled)) +
-		barEmpty.Render(strings.Repeat("─", barW-filled)) +
-		textSubtle.Render(label)
+	bar := style.Render(strings.Repeat("━", filled)) +
+		barEmpty.Render(strings.Repeat("━", avail-filled))
+	return truncate(prefix+label+textSubtle.Render(" ")+bar, width)
 }
 
 func formatRate(n int64) string {
@@ -448,7 +478,7 @@ func (m Model) listBudget() int {
 	if m.height <= 0 {
 		return 8
 	}
-	used := 4 // HUD base
+	used := 3 // HUD base (top + status/traffic + bottom)
 	if info := m.provider.SubscriptionInfo; info != nil && info.Total > 0 {
 		used++
 	}
