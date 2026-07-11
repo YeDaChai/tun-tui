@@ -7,15 +7,23 @@ import (
 
 func CleanupGeoFiles(dataDir string) {
 	const minMMDBSize = 1024 * 1024
-	for _, name := range []string{"geoip.metadb", "geoip.metadb.download"} {
-		path := filepath.Join(dataDir, name)
+	const minGeositeSize = 1024 * 1024
+	for _, item := range []struct {
+		name    string
+		minSize int64
+	}{
+		{"geoip.metadb", minMMDBSize},
+		{"geosite.dat", minGeositeSize},
+	} {
+		path := filepath.Join(dataDir, item.name)
 		info, err := os.Stat(path)
 		if err != nil {
 			continue
 		}
-		if name == "geoip.metadb" && info.Size() >= minMMDBSize {
+		if info.Size() >= item.minSize {
 			continue
 		}
 		_ = os.Remove(path)
+		_ = os.Remove(path + ".download")
 	}
 }

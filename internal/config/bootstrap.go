@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"tun-tui/internal/geodata"
 )
 
 //go:embed default_config.yaml
@@ -36,6 +38,10 @@ func Bootstrap(dataDir string) error {
 		if err := os.WriteFile(examplePath, []byte(subscriptionExample), 0o644); err != nil {
 			return fmt.Errorf("write subscription example: %w", err)
 		}
+	}
+
+	if err := geodata.Install(dataDir); err != nil {
+		return fmt.Errorf("install bundled geodata: %w", err)
 	}
 
 	return nil

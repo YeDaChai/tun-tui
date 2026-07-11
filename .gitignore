@@ -12,6 +12,14 @@ data/subscription.links
 data/mode
 data/geoip.metadb
 data/geoip.metadb.download
+data/geosite.dat
+data/geosite.dat.download
+
+# 构建时下载，编译嵌入二进制
+internal/geodata/geoip.metadb
+internal/geodata/geoip.metadb.download
+internal/geodata/geosite.dat
+internal/geodata/geosite.dat.download
 
 # IDE
 .idea/

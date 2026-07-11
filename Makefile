@@ -1,6 +1,6 @@
 .DEFAULT_GOAL := build
 
-.PHONY: build build-all release run install clean help
+.PHONY: build build-all release run install clean help fetch-geodata
 
 APP      := tun-tui
 VERSION  ?= 0.1.2
@@ -19,6 +19,7 @@ LDFLAGS  := -s -w \
 
 BIN_DIR  := bin
 DIST_DIR := dist
+GEODATA_DIR := internal/geodata
 
 # macOS / Windows TUN 使用 gVisor 用户态栈；Linux 使用 system 栈
 ifeq ($(GOOS),darwin)
@@ -50,12 +51,15 @@ PLATFORMS := \
 	linux/arm64 \
 	windows/amd64
 
-build:
+fetch-geodata:
+	@./scripts/fetch-geodata.sh
+
+build: fetch-geodata
 	@mkdir -p $(BIN_DIR)
 	@echo ">> build $(GOOS)/$(GOARCH)$(if $(BUILD_TAGS), [$(BUILD_TAGS)],)"
 	GOOS=$(GOOS) GOARCH=$(GOARCH) go build $(TAGS_FLAG) -ldflags "$(LDFLAGS)" -o $(NATIVE_BIN) ./cmd/app/
 
-build-all:
+build-all: fetch-geodata
 	@mkdir -p $(BIN_DIR)
 	@for p in $(PLATFORMS); do \
 		os=$${p%/*}; arch=$${p#*/}; \
@@ -92,13 +96,14 @@ release: build-all
 		name=$(APP)-$(VERSION)-$$label; \
 		tmp=$$(mktemp -d); \
 		cp $(BIN_DIR)/$(APP)-$$label$$ext $$tmp/$(APP)$$ext; \
+		cp $(GEODATA_DIR)/geoip.metadb $(GEODATA_DIR)/geosite.dat $$tmp/; \
 		if [ "$$os" = darwin ] && command -v codesign >/dev/null 2>&1; then \
 			codesign -s - --force --timestamp=none $$tmp/$(APP)$$ext >/dev/null 2>&1 || true; \
 		fi; \
 		if [ "$$os" = windows ]; then \
-			(cd $$tmp && zip -q -r $(CURDIR)/$(DIST_DIR)/$$name.zip $(APP)$$ext); \
+			(cd $$tmp && zip -q -r $(CURDIR)/$(DIST_DIR)/$$name.zip $(APP)$$ext geoip.metadb geosite.dat); \
 		else \
-			tar -czf $(DIST_DIR)/$$name.tar.gz -C $$tmp $(APP)$$ext; \
+			tar -czf $(DIST_DIR)/$$name.tar.gz -C $$tmp $(APP)$$ext geoip.metadb geosite.dat; \
 		fi; \
 		rm -rf $$tmp; \
 	done
@@ -125,6 +130,7 @@ clean:
 help:
 	@echo "本机编译:   make build          ($(GOOS)/$(GOARCH))"
 	@echo "全平台编译: make build-all      (darwin/linux/windows)"
+	@echo "下载 geo:   make fetch-geodata  (geoip + geosite)"
 	@echo "发布打包:   make release        (压缩包 -> dist/)"
 	@echo "开发运行:   make run            (需管理员权限)"
 	@echo "源码安装:   make install        (默认 /usr/local/bin)"
