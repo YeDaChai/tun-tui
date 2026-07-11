@@ -22,7 +22,7 @@ proxy-providers:
   subscription:
     type: http
     url: ""
-    interval: 3600
+    interval: 0
     path: ./providers/subscription.yaml
     health-check:
       enable: true

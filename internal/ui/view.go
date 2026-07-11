@@ -62,10 +62,14 @@ var (
 )
 
 func (m Model) View() string {
-	if m.screen == screenLinkList {
+	switch m.screen {
+	case screenLinkList:
 		return m.viewLinkScreen()
+	case screenSettings:
+		return m.viewSettingsScreen()
+	default:
+		return m.viewMain()
 	}
-	return m.viewMain()
 }
 
 func (m Model) viewMain() string {
@@ -231,8 +235,8 @@ func (m Model) renderFooter() string {
 	w := m.contentWidth()
 	f := newFrame(w, false)
 	keys := [][2]string{
-		{"l", "链接"}, {"s", "连接"}, {"m", "模式"}, {"↑↓", "选择"},
-		{"↵", "确认"}, {"u", "更新"}, {"t", "测速"}, {"r", "重载"}, {"q", "退出"},
+		{"l", "链接"}, {"p", "设置"}, {"s", "连接"}, {"m", "模式"}, {"↑↓", "选择"},
+		{"u", "更新"}, {"t", "测速"}, {"q", "退出"},
 	}
 	parts := make([]string, 0, len(keys))
 	for _, k := range keys {

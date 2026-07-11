@@ -22,6 +22,7 @@ type screen int
 const (
 	screenMain screen = iota
 	screenLinkList
+	screenSettings
 )
 
 type tickMsg struct{}
@@ -317,6 +318,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.running, m.err = true, ""
+		if url, err := config.LoadSubscriptionURL(m.paths.DataDir); err == nil && config.HasProviderCache(m.paths.DataDir) {
+			_ = config.MarkProviderCache(m.paths.DataDir, url)
+		}
 		return m, tea.Batch(refresh(m), func() tea.Msg {
 			if config.NormalizeMode(config.LoadMode(m.paths.DataDir, "rule")) == "global" ||
 				config.NormalizeMode(m.mode) == "global" {
@@ -332,6 +336,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if m.screen == screenLinkList {
 			return m.updateLinkScreen(msg)
 		}
+		if m.screen == screenSettings {
+			return m.updateSettingsScreen(msg)
+		}
 		return m.updateMain(msg)
 	}
 	return m, nil
@@ -344,6 +351,8 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case "l":
 		return m.openLinkScreen(), textinput.Blink
+	case "p":
+		return m.openSettingsScreen(), nil
 	case "s":
 		if m.starting || m.busy {
 			return m, nil
@@ -364,21 +373,6 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.beginConnect()
-	case "r":
-		if !m.running {
-			m.err = "请先连接"
-			return m, nil
-		}
-		if m.busy {
-			return m, nil
-		}
-		m.busy = true
-		return m, func() tea.Msg {
-			if err := reloadAndSyncMode(m.runner, m.api, m.paths.DataDir); err != nil {
-				return actionMsg{err: err}
-			}
-			return actionMsg{refresh: true}
-		}
 	case "u":
 		if !m.running {
 			m.err = "请先连接"
@@ -392,6 +386,7 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if err := m.api.UpdateProvider(config.ProviderName); err != nil {
 				return actionMsg{err: err}
 			}
+			markProviderCache(m.paths.DataDir)
 			return actionMsg{refresh: true}
 		}
 	case "t":

@@ -16,6 +16,14 @@ type linkMsg struct {
 	refresh bool
 }
 
+func markProviderCache(dataDir string) {
+	url, err := config.LoadSubscriptionURL(dataDir)
+	if err != nil || url == "" || !config.HasProviderCache(dataDir) {
+		return
+	}
+	_ = config.MarkProviderCache(dataDir, url)
+}
+
 func (m Model) openLinkScreen() Model {
 	urls, active, err := config.LoadSubscriptionLinks(m.paths.DataDir)
 	m.screen = screenLinkList
@@ -133,6 +141,7 @@ func (m Model) selectLink(index int) tea.Cmd {
 		if err := reloadAndSyncMode(m.runner, m.api, m.paths.DataDir); err != nil {
 			return actionMsg{err: err}
 		}
+		markProviderCache(m.paths.DataDir)
 		return actionMsg{refresh: true}
 	}
 }
@@ -148,6 +157,7 @@ func (m Model) addLink(url string) tea.Cmd {
 		if err := reloadAndSyncMode(m.runner, m.api, m.paths.DataDir); err != nil {
 			return linkMsg{added: true, err: err}
 		}
+		markProviderCache(m.paths.DataDir)
 		return linkMsg{added: true, refresh: true}
 	}
 }
