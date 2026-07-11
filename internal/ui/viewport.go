@@ -137,24 +137,6 @@ func (m *Model) moveCursor(delta int) {
 	m.clampListScroll()
 }
 
-func (m *Model) scrollRows(delta int) {
-	if len(m.nodes) == 0 {
-		return
-	}
-	vp := m.listViewport()
-	m.rowOffset += delta
-	if m.rowOffset < 0 {
-		m.rowOffset = 0
-	}
-	maxOffset := len(m.nodes) - vp.visibleRows
-	if maxOffset < 0 {
-		maxOffset = 0
-	}
-	if m.rowOffset > maxOffset {
-		m.rowOffset = maxOffset
-	}
-}
-
 func (m *Model) clampListScroll() {
 	vp := m.listViewport()
 	m.cursor, m.rowOffset = clampScroll(len(m.nodes), m.cursor, m.rowOffset, vp.visibleRows)
@@ -172,24 +154,6 @@ func (m *Model) moveLinkCursor(delta int) {
 		m.linkCursor = len(m.linkURLs) - 1
 	}
 	m.clampLinkScroll()
-}
-
-func (m *Model) scrollLinkRows(delta int) {
-	if len(m.linkURLs) == 0 {
-		return
-	}
-	vp := m.linkViewport()
-	m.linkRowOffset += delta
-	if m.linkRowOffset < 0 {
-		m.linkRowOffset = 0
-	}
-	maxOffset := len(m.linkURLs) - vp.visibleRows
-	if maxOffset < 0 {
-		maxOffset = 0
-	}
-	if m.linkRowOffset > maxOffset {
-		m.linkRowOffset = maxOffset
-	}
 }
 
 func (m *Model) clampLinkScroll() {

@@ -171,29 +171,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case autoConnectMsg:
 		return m.beginConnect()
 
-	case tea.MouseMsg:
-		if m.screen == screenLinkList {
-			if !m.linkInputFocus {
-				switch msg.Button {
-				case tea.MouseButtonWheelUp:
-					m.scrollLinkRows(-1)
-				case tea.MouseButtonWheelDown:
-					m.scrollLinkRows(1)
-				}
-			}
-			return m, nil
-		}
-		if m.screen != screenMain || len(m.nodes) == 0 {
-			return m, nil
-		}
-		switch msg.Button {
-		case tea.MouseButtonWheelUp:
-			m.scrollRows(-1)
-		case tea.MouseButtonWheelDown:
-			m.scrollRows(1)
-		}
-		return m, nil
-
 	case tea.KeyMsg:
 		if m.screen == screenLinkList {
 			return m.updateLinkScreen(msg)

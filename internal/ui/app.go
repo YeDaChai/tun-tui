@@ -22,7 +22,6 @@ func Run(ctx context.Context, paths config.Paths, runner *core.Runner, client *a
 		New(paths, runner, client, appVersion),
 		tea.WithContext(ctx),
 		tea.WithAltScreen(),
-		tea.WithMouseCellMotion(),
 	)
 	_, err := p.Run()
 	return err
