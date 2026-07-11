@@ -88,16 +88,6 @@ func isTransientProxyErr(err error) bool {
 	return false
 }
 
-func (c *Client) Version() (Version, error) {
-	data, err := c.request(http.MethodGet, "/version", nil)
-	if err != nil {
-		return Version{}, err
-	}
-
-	var v Version
-	return v, json.Unmarshal(data, &v)
-}
-
 func (c *Client) Configs() (Configs, error) {
 	data, err := c.request(http.MethodGet, "/configs", nil)
 	if err != nil {
@@ -298,11 +288,6 @@ func (c *Client) UpdateProvider(name string) error {
 		return fmt.Errorf("api PUT %s: %s %s", path, resp.Status, strings.TrimSpace(string(body)))
 	}
 	return nil
-}
-
-type Version struct {
-	Meta    bool   `json:"meta"`
-	Version string `json:"version"`
 }
 
 type Configs struct {

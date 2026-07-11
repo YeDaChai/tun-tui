@@ -14,7 +14,6 @@ type linkMsg struct {
 	added   bool
 	deleted bool
 	err     error
-	status  string
 	refresh bool
 }
 
@@ -129,14 +128,13 @@ func (m Model) selectLink(index int) tea.Cmd {
 		if err := config.SetActiveSubscriptionLink(m.paths.DataDir, index); err != nil {
 			return actionMsg{err: err}
 		}
-		msg := actionMsg{refresh: m.running}
 		if !m.running {
 			return actionMsg{}
 		}
-		if status, err := reloadAndSyncMode(m.runner, m.api, m.paths.DataDir); err != nil {
-			return actionMsg{err: err, status: status}
+		if err := reloadAndSyncMode(m.runner, m.api, m.paths.DataDir); err != nil {
+			return actionMsg{err: err}
 		}
-		return msg
+		return actionMsg{refresh: true}
 	}
 }
 
@@ -148,10 +146,10 @@ func (m Model) addLink(url string) tea.Cmd {
 		if !m.running {
 			return linkMsg{added: true}
 		}
-		if status, err := reloadAndSyncMode(m.runner, m.api, m.paths.DataDir); err != nil {
-			return linkMsg{added: true, err: err, status: status}
+		if err := reloadAndSyncMode(m.runner, m.api, m.paths.DataDir); err != nil {
+			return linkMsg{added: true, err: err}
 		}
-		return linkMsg{added: true, status: "已添加并应用", refresh: true}
+		return linkMsg{added: true, refresh: true}
 	}
 }
 
@@ -163,15 +161,15 @@ func (m Model) deleteLink(index int) tea.Cmd {
 		}
 		urls, _, err := config.LoadSubscriptionLinks(m.paths.DataDir)
 		if err != nil {
-			return linkMsg{deleted: true, err: err, status: "已删除链接"}
+			return linkMsg{deleted: true, err: err}
 		}
 		if !m.running || !wasActive || len(urls) == 0 {
-			return linkMsg{deleted: true, status: "已删除链接"}
+			return linkMsg{deleted: true}
 		}
-		if status, err := reloadAndSyncMode(m.runner, m.api, m.paths.DataDir); err != nil {
-			return linkMsg{deleted: true, err: err, status: status}
+		if err := reloadAndSyncMode(m.runner, m.api, m.paths.DataDir); err != nil {
+			return linkMsg{deleted: true, err: err}
 		}
-		return linkMsg{deleted: true, status: "已删除并应用", refresh: true}
+		return linkMsg{deleted: true, refresh: true}
 	}
 }
 

@@ -82,7 +82,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 	defer stop()
 
-	if err := ui.Run(ctx, paths, runner, client, version.String(), binName); err != nil {
+	if err := ui.Run(ctx, paths, runner, client, binName); err != nil {
 		fmt.Fprintf(os.Stderr, "ui error: %v\n", err)
 		os.Exit(1)
 	}

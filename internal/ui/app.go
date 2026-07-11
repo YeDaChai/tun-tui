@@ -26,7 +26,6 @@ const (
 
 type tickMsg struct{}
 type refreshMsg struct {
-	version         string
 	mode            string
 	traffic         api.Traffic
 	group           api.Proxy
@@ -40,7 +39,6 @@ type delayMsg struct {
 	err    error
 }
 type actionMsg struct {
-	status  string
 	err     error
 	refresh bool
 }
@@ -51,7 +49,6 @@ type Model struct {
 	paths           config.Paths
 	runner          *core.Runner
 	api             *api.Client
-	appVersion      string
 	screen          screen
 	linkInput       textinput.Model
 	linkURLs        []string
@@ -62,7 +59,6 @@ type Model struct {
 	subscriptionURL string
 	running         bool
 	starting        bool
-	version         string
 	mode            string
 	traffic         api.Traffic
 	group           api.Proxy
@@ -73,7 +69,6 @@ type Model struct {
 	cursor          int
 	rowOffset       int
 	delays          map[string]uint16
-	status          string
 	err             string
 	width           int
 	height          int
@@ -81,26 +76,20 @@ type Model struct {
 	nodeCrypto      string
 }
 
-func Run(ctx context.Context, paths config.Paths, runner *core.Runner, client *api.Client, appVersion, binName string) error {
+func Run(ctx context.Context, paths config.Paths, runner *core.Runner, client *api.Client, binName string) error {
 	if !isatty.IsTerminal(os.Stdin.Fd()) || !isatty.IsTerminal(os.Stdout.Fd()) {
 		return fmt.Errorf("需要在交互式终端中运行，不能从 IDE 的 Run/Debug 按钮直接启动\n请在终端执行:\n  %s", binName)
 	}
 	_, err := tea.NewProgram(
-		New(paths, runner, client, appVersion),
+		New(paths, runner, client),
 		tea.WithContext(ctx),
 		tea.WithAltScreen(),
 	).Run()
 	return err
 }
 
-func New(paths config.Paths, runner *core.Runner, client *api.Client, appVersion string) Model {
+func New(paths config.Paths, runner *core.Runner, client *api.Client) Model {
 	subURL, err := config.LoadSubscriptionURL(paths.DataDir)
-	status := "按 l 管理订阅链接"
-	if err != nil {
-		status = "读取订阅失败"
-	} else if subURL != "" {
-		status = "自动连接中…"
-	}
 
 	ti := textinput.New()
 	ti.Placeholder = "https://your-subscription-url"
@@ -112,14 +101,12 @@ func New(paths config.Paths, runner *core.Runner, client *api.Client, appVersion
 		paths:           paths,
 		runner:          runner,
 		api:             client,
-		appVersion:      appVersion,
 		linkInput:       ti,
 		linkActive:      -1,
 		subscriptionURL: subURL,
 		activeGroup:     api.DefaultProxyGroup,
 		nodes:           []string{},
 		delays:          map[string]uint16{},
-		status:          status,
 		hasSubscription: subURL != "",
 	}
 	if err != nil {
@@ -145,10 +132,6 @@ func refresh(m Model) tea.Cmd {
 		if !m.running {
 			return refreshMsg{err: fmt.Errorf("内核未运行")}
 		}
-		version, err := m.api.Version()
-		if err != nil {
-			return refreshMsg{err: err}
-		}
 		cfg, err := m.api.Configs()
 		if err != nil {
 			return refreshMsg{err: err}
@@ -165,7 +148,6 @@ func refresh(m Model) tea.Cmd {
 		}
 		if !ok {
 			return refreshMsg{
-				version: version.Version,
 				mode:    config.NormalizeMode(cfg.Mode),
 				traffic: traffic,
 				err:     fmt.Errorf("找不到代理组"),
@@ -174,7 +156,6 @@ func refresh(m Model) tea.Cmd {
 
 		subURL, _ := config.LoadSubscriptionURL(m.paths.DataDir)
 		msg := refreshMsg{
-			version:         version.Version,
 			mode:            config.NormalizeMode(cfg.Mode),
 			traffic:         traffic,
 			group:           group,
@@ -202,14 +183,14 @@ func refresh(m Model) tea.Cmd {
 	}
 }
 
-func reloadAndSyncMode(runner *core.Runner, client *api.Client, dataDir string) (string, error) {
+func reloadAndSyncMode(runner *core.Runner, client *api.Client, dataDir string) error {
 	if err := runner.Reload(); err != nil {
-		return "重载失败", err
+		return fmt.Errorf("重载失败: %w", err)
 	}
 	if err := client.PatchMode(config.LoadMode(dataDir, "rule")); err != nil {
-		return "模式同步失败", err
+		return fmt.Errorf("模式同步失败: %w", err)
 	}
-	return "", nil
+	return nil
 }
 
 func (m *Model) syncSubscription() {
@@ -252,7 +233,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.err = ""
-		m.version = msg.version
 		m.mode = msg.mode
 		m.traffic = msg.traffic
 		m.group = msg.group
@@ -272,10 +252,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case delayMsg:
 		m.busy = false
 		if msg.err != nil {
-			m.status, m.err = "测速失败", msg.err.Error()
+			m.err = msg.err.Error()
 			return m, nil
 		}
-		m.delays, m.status, m.err = msg.delays, "测速完成", ""
+		m.delays, m.err = msg.delays, ""
 		return m, nil
 
 	case linkMsg:
@@ -308,14 +288,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.clampLinkScroll()
 			}
 			m.syncSubscription()
-			switch {
-			case msg.status != "":
-				m.status = msg.status
-			case msg.added:
-				m.status = "已添加链接"
-			default:
-				m.status = "已删除链接"
-			}
 		}
 		if msg.refresh {
 			return m, refresh(m)
@@ -329,9 +301,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.err = ""
 		}
-		if msg.status != "" {
-			m.status = msg.status
-		}
 		m.syncSubscription()
 		m.linkInput.SetValue("")
 		if msg.refresh {
@@ -344,10 +313,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.busy = false
 		m.running = m.runner.Running()
 		if msg.err != nil {
-			m.err, m.status = msg.err.Error(), "连接失败"
+			m.err = msg.err.Error()
 			return m, nil
 		}
-		m.running, m.status, m.err = true, "", ""
+		m.running, m.err = true, ""
 		return m, tea.Batch(refresh(m), func() tea.Msg {
 			if config.NormalizeMode(config.LoadMode(m.paths.DataDir, "rule")) == "global" ||
 				config.NormalizeMode(m.mode) == "global" {
@@ -382,8 +351,6 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.running {
 			err := m.runner.Stop()
 			m.running = false
-			m.status = "已断开"
-			m.version = ""
 			m.nodes = nil
 			m.nodeCrypto = ""
 			m.provider = api.ProxyProvider{}
@@ -399,54 +366,50 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.beginConnect()
 	case "r":
 		if !m.running {
-			m.status = "请先连接"
+			m.err = "请先连接"
 			return m, nil
 		}
 		if m.busy {
 			return m, nil
 		}
 		m.busy = true
-		m.status = "重载中…"
 		return m, func() tea.Msg {
-			status, err := reloadAndSyncMode(m.runner, m.api, m.paths.DataDir)
-			if err != nil {
-				return actionMsg{status: status, err: err}
+			if err := reloadAndSyncMode(m.runner, m.api, m.paths.DataDir); err != nil {
+				return actionMsg{err: err}
 			}
-			return actionMsg{status: "已重载", refresh: true}
+			return actionMsg{refresh: true}
 		}
 	case "u":
 		if !m.running {
-			m.status = "请先连接"
+			m.err = "请先连接"
 			return m, nil
 		}
 		if m.busy {
 			return m, nil
 		}
 		m.busy = true
-		m.status = "更新中…"
 		return m, func() tea.Msg {
 			if err := m.api.UpdateProvider(config.ProviderName); err != nil {
 				return actionMsg{err: err}
 			}
-			return actionMsg{status: "订阅已更新", refresh: true}
+			return actionMsg{refresh: true}
 		}
 	case "t":
 		if !m.running {
-			m.status = "请先连接"
+			m.err = "请先连接"
 			return m, nil
 		}
 		if m.busy {
 			return m, nil
 		}
 		m.busy = true
-		m.status = "测速中…"
 		return m, func() tea.Msg {
 			delays, err := m.api.GroupDelay(m.activeGroup, testURL)
 			return delayMsg{delays: delays, err: err}
 		}
 	case "m":
 		if !m.running {
-			m.status = "请先连接"
+			m.err = "请先连接"
 			return m, nil
 		}
 		if m.busy {
@@ -454,7 +417,7 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.busy = true
 		next := nextMode(m.mode)
-		m.mode, m.status = next, ""
+		m.mode = next
 		dataDir := m.paths.DataDir
 		return m, func() tea.Msg {
 			if err := config.SaveMode(dataDir, next); err != nil {
@@ -481,7 +444,7 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if err := m.api.SelectProxy(m.activeGroup, node); err != nil {
 				return actionMsg{err: err}
 			}
-			return actionMsg{status: "已切换 → " + node, refresh: true}
+			return actionMsg{refresh: true}
 		}
 	}
 	return m, nil
@@ -492,14 +455,14 @@ func (m Model) beginConnect() (Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.subscriptionURL == "" {
-		m.status, m.err = "连接失败", "按 l 添加订阅链接"
+		m.err = "按 l 添加订阅链接"
 		return m, nil
 	}
 	if !core.TunBuildReady() {
-		m.status, m.err = "连接失败", core.TunBuildHint()
+		m.err = core.TunBuildHint()
 		return m, nil
 	}
-	m.starting, m.busy, m.status, m.err = true, true, "连接中…", ""
+	m.starting, m.busy, m.err = true, true, ""
 	return m, func() tea.Msg {
 		if err := m.runner.Start(); err != nil {
 			return startMsg{err: err}

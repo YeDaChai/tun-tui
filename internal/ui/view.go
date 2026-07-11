@@ -9,50 +9,56 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"tun-tui/internal/config"
-	"tun-tui/internal/geodata"
 )
 
+// Dark palette aligned with Claude Code defaults (warm coral accent, readable grays).
 var (
-	accent = lipgloss.Color("39")
-	ok     = lipgloss.Color("71")
-	warn   = lipgloss.Color("178")
-	danger = lipgloss.Color("167")
-	fg     = lipgloss.Color("252")
-	muted  = lipgloss.Color("245")
-	subtle = lipgloss.Color("240")
-	selBg  = lipgloss.Color("236")
+	accent  = lipgloss.Color("#D77757") // claude
+	suggest = lipgloss.Color("#B1B9F9") // suggestion / permission
+	ok      = lipgloss.Color("#4EBA65") // success
+	warn    = lipgloss.Color("#FFC107") // warning
+	danger  = lipgloss.Color("#FF6B80") // error
+	muted   = lipgloss.Color("#999999") // inactive — secondary labels
+	subtle  = lipgloss.Color("#666666") // chrome / borders (brighter than CC #505050)
+	selBg   = lipgloss.Color("#2A2420") // warm selection wash
+	track   = lipgloss.Color("#404040")
 
 	frameBorderActive = lipgloss.NewStyle().Foreground(accent)
-	statusOnline        = lipgloss.NewStyle().Foreground(ok).Bold(true)
-	statusOffline       = lipgloss.NewStyle().Foreground(muted)
-	statusLoading       = lipgloss.NewStyle().Foreground(warn).Bold(true)
-	textErr             = lipgloss.NewStyle().Foreground(danger)
-	textMuted           = lipgloss.NewStyle().Foreground(muted)
-	textSubtle          = lipgloss.NewStyle().Foreground(subtle)
-	textBody            = lipgloss.NewStyle().Foreground(fg)
-	inputPanel          = lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(accent).BorderTop(true).BorderBottom(true).BorderLeft(false).BorderRight(false).Padding(1, 0)
-	itemSelected        = lipgloss.NewStyle().Foreground(accent).Background(selBg).Bold(true)
-	itemCurrent         = lipgloss.NewStyle().Foreground(ok).Bold(true)
-	itemNormal          = lipgloss.NewStyle().Foreground(muted)
-	pingFast            = lipgloss.NewStyle().Foreground(ok)
-	pingMid             = lipgloss.NewStyle().Foreground(warn)
-	pingSlow            = lipgloss.NewStyle().Foreground(danger)
-	pingDead            = lipgloss.NewStyle().Foreground(muted)
-	txColor             = lipgloss.NewStyle().Foreground(accent)
-	rxColor             = lipgloss.NewStyle().Foreground(ok)
-	dividerStyle        = lipgloss.NewStyle().Foreground(subtle)
-	footerKey           = lipgloss.NewStyle().Foreground(accent).Bold(true)
-	footerLabel         = lipgloss.NewStyle().Foreground(muted)
-	footerSep           = lipgloss.NewStyle().Foreground(subtle)
-	sectionTitle        = lipgloss.NewStyle().Foreground(accent).Bold(true)
-	barFull             = lipgloss.NewStyle().Foreground(ok)
-	barWarning          = lipgloss.NewStyle().Foreground(warn)
-	barDanger           = lipgloss.NewStyle().Foreground(danger)
-	barEmpty            = lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
-	modeActive          = lipgloss.NewStyle().Foreground(accent).Bold(true)
-	rulesOn             = lipgloss.NewStyle().Foreground(ok).Bold(true)
-	rulesOff            = lipgloss.NewStyle().Foreground(muted)
-	rulesBad            = lipgloss.NewStyle().Foreground(warn).Bold(true)
+	statusOnline      = lipgloss.NewStyle().Foreground(ok).Bold(true)
+	statusOffline     = lipgloss.NewStyle().Foreground(muted)
+	statusLoading     = lipgloss.NewStyle().Foreground(warn).Bold(true)
+	textErr           = lipgloss.NewStyle().Foreground(danger)
+	textSubtle        = lipgloss.NewStyle().Foreground(muted)
+	inputPanel        = lipgloss.NewStyle().
+				Border(lipgloss.NormalBorder()).
+				BorderForeground(accent).
+				BorderTop(true).
+				BorderBottom(true).
+				BorderLeft(false).
+				BorderRight(false).
+				Padding(1, 0)
+	itemSelected = lipgloss.NewStyle().
+			Foreground(suggest).
+			Background(selBg).
+			Bold(true)
+	itemCurrent  = lipgloss.NewStyle().Foreground(ok).Bold(true)
+	itemNormal   = lipgloss.NewStyle().Foreground(muted)
+	pingFast     = lipgloss.NewStyle().Foreground(ok)
+	pingMid      = lipgloss.NewStyle().Foreground(warn)
+	pingSlow     = lipgloss.NewStyle().Foreground(danger)
+	pingDead     = lipgloss.NewStyle().Foreground(subtle)
+	txColor      = lipgloss.NewStyle().Foreground(accent)
+	rxColor      = lipgloss.NewStyle().Foreground(ok)
+	dividerStyle = lipgloss.NewStyle().Foreground(subtle)
+	footerKey    = lipgloss.NewStyle().Foreground(accent).Bold(true)
+	footerLabel  = lipgloss.NewStyle().Foreground(muted)
+	footerSep    = lipgloss.NewStyle().Foreground(subtle)
+	sectionTitle = lipgloss.NewStyle().Foreground(accent).Bold(true)
+	barFull      = lipgloss.NewStyle().Foreground(ok)
+	barWarning   = lipgloss.NewStyle().Foreground(warn)
+	barDanger    = lipgloss.NewStyle().Foreground(danger)
+	barEmpty     = lipgloss.NewStyle().Foreground(track)
+	modeActive   = lipgloss.NewStyle().Foreground(accent).Bold(true)
 )
 
 func (m Model) View() string {
@@ -89,9 +95,6 @@ func (m Model) renderHUD() string {
 	b.WriteString(f.top() + "\n")
 	b.WriteString(f.split(m.connectionLine(), m.metaLine()) + "\n")
 	b.WriteString(f.row(m.trafficLine()) + "\n")
-	if strings.TrimSpace(m.status) != "" {
-		b.WriteString(f.row(textMuted.Render(truncate(m.status, w))) + "\n")
-	}
 	if info := m.provider.SubscriptionInfo; info != nil && info.Total > 0 {
 		b.WriteString(f.row(" "+usageBar(info.Upload+info.Download, info.Total, w-2)) + "\n")
 	}
@@ -115,41 +118,13 @@ func (m Model) connectionLine() string {
 
 func (m Model) metaLine() string {
 	var parts []string
-	if m.appVersion != "" {
-		parts = append(parts, textSubtle.Render("tun-tui")+textBody.Render(" "+m.appVersion))
-	}
-	if m.version != "" {
-		parts = append(parts, textSubtle.Render("mihomo")+textBody.Render(" "+m.version))
-	}
 	if m.mode != "" {
 		parts = append(parts, textSubtle.Render("模式: ")+modeActive.Render(modeLabel(m.mode)))
 	}
 	if m.nodeCrypto != "" {
 		parts = append(parts, textSubtle.Render("协议: ")+modeActive.Render(m.nodeCrypto))
 	}
-	parts = append(parts, m.rulesStatus())
 	return strings.Join(parts, "  ")
-}
-
-func (m Model) rulesStatus() string {
-	if !m.running {
-		return rulesOff.Render("规则 --")
-	}
-	ready := geodata.Ready(m.paths.DataDir)
-	switch config.NormalizeMode(m.mode) {
-	case "rule":
-		if ready {
-			return rulesOn.Render("规则 开")
-		}
-		return rulesBad.Render("规则缺数据")
-	case "global", "direct":
-		return rulesOff.Render("规则 关")
-	default:
-		if ready {
-			return rulesOn.Render("规则 开")
-		}
-		return rulesOff.Render("规则 --")
-	}
 }
 
 func (m Model) trafficLine() string {
@@ -387,8 +362,8 @@ func usageBar(used, total int64, width int) string {
 	case ratio > 0.7:
 		style = barWarning
 	}
-	return style.Render(strings.Repeat("█", filled)) +
-		barEmpty.Render(strings.Repeat("░", barW-filled)) +
+	return style.Render(strings.Repeat("─", filled)) +
+		barEmpty.Render(strings.Repeat("─", barW-filled)) +
 		textSubtle.Render(label)
 }
 
@@ -491,9 +466,6 @@ func (m Model) listBudget() int {
 		return 8
 	}
 	used := 4 // HUD base
-	if strings.TrimSpace(m.status) != "" {
-		used++
-	}
 	if info := m.provider.SubscriptionInfo; info != nil && info.Total > 0 {
 		used++
 	}
