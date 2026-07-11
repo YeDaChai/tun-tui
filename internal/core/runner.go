@@ -17,6 +17,7 @@ import (
 	logrus "github.com/sirupsen/logrus"
 
 	"tun-tui/internal/config"
+	"tun-tui/internal/geodata"
 )
 
 type Runner struct {
@@ -50,6 +51,9 @@ func (r *Runner) Start() error {
 	}
 
 	CleanupGeoFiles(r.dataDir)
+	if err := geodata.Install(r.dataDir); err != nil {
+		return fmt.Errorf("install geodata: %w", err)
+	}
 
 	cfgBytes, err := config.BuildConfigBytes(r.dataDir, r.cfgPath)
 	if err != nil {
@@ -105,6 +109,9 @@ func (r *Runner) Reload() error {
 	}
 
 	CleanupGeoFiles(r.dataDir)
+	if err := geodata.Install(r.dataDir); err != nil {
+		return fmt.Errorf("install geodata: %w", err)
+	}
 
 	cfgBytes, err := config.BuildConfigBytes(r.dataDir, r.cfgPath)
 	if err != nil {

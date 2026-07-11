@@ -57,6 +57,12 @@ func verifyTunStarted(dataDir string, offset int64) error {
 	lines := strings.Split(string(data[offset:]), "\n")
 	for i := len(lines) - 1; i >= 0; i-- {
 		line := lines[i]
+		if strings.Contains(line, "External controller listen error") && strings.Contains(line, "address already in use") {
+			return fmt.Errorf("控制端口 9090 被占用（常见于 Clash / ClashLite 的 Tunnel 进程仍在运行），请完全退出后再试")
+		}
+		if strings.Contains(line, "can't initial GeoSite") || strings.Contains(line, "can't initial GeoIP") {
+			return fmt.Errorf("地理数据初始化失败，请重试或检查网络；详见 mihomo.log")
+		}
 		if !strings.Contains(line, "Start TUN listening error") {
 			continue
 		}
@@ -65,6 +71,9 @@ func verifyTunStarted(dataDir string, offset int64) error {
 		}
 		if strings.Contains(line, "gVisor is not included") {
 			return fmt.Errorf("当前版本未包含 gVisor，请下载最新 Release 或重新编译")
+		}
+		if strings.Contains(line, "file exists") {
+			return fmt.Errorf("TUN 路由残留，请先执行: sudo tun-tui -cleanup")
 		}
 		if idx := strings.Index(line, "msg=\""); idx >= 0 {
 			msg := line[idx+5:]

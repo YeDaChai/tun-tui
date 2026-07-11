@@ -117,6 +117,9 @@ func applyTunSettings(root map[string]any) {
 			},
 		},
 	}
+	// Use bundled geoip.metadb (MMDB). geodata-mode:true expects GeoIP.dat and
+	// will block startup trying to download it when the file is missing/invalid.
+	root["geodata-mode"] = false
 	root["geo-auto-update"] = false
 	root["log-level"] = "warning"
 

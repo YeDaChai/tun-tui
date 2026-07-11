@@ -26,102 +26,77 @@ const (
 	screenLinkList
 )
 
-// ═══════════════════════════════════════════════════════════════
-// COLOR PALETTE — Cyberpunk / Synthwave
-// ═══════════════════════════════════════════════════════════════
+// Color palette — clean, calm terminal tool
 var (
-	neonCyan   = lipgloss.Color("51")
-	neonMag    = lipgloss.Color("201")
-	neonGreen  = lipgloss.Color("46")
-	neonYellow = lipgloss.Color("226")
-	neonRed    = lipgloss.Color("196")
-	neonOrange = lipgloss.Color("208")
+	accent = lipgloss.Color("39")  // soft blue
+	ok     = lipgloss.Color("71")  // soft green
+	warn   = lipgloss.Color("178") // soft yellow
+	danger = lipgloss.Color("167") // soft red
 
-	white    = lipgloss.Color("255")
-	greyMed  = lipgloss.Color("245")
-	greyLow  = lipgloss.Color("240")
-	greyDark = lipgloss.Color("236")
-	bgDark   = lipgloss.Color("233")
-
-	hpGreen  = lipgloss.Color("40")
-	hpYellow = lipgloss.Color("220")
-	hpRed    = lipgloss.Color("196")
+	fg     = lipgloss.Color("252")
+	muted  = lipgloss.Color("245")
+	subtle = lipgloss.Color("240")
+	selBg  = lipgloss.Color("236")
 )
 
-// ═══════════════════════════════════════════════════════════════
-// STYLES
-// ═══════════════════════════════════════════════════════════════
 var (
-	// ── frame borders ──
-	frameBorderInactive = lipgloss.NewStyle().Foreground(greyLow)
-	frameBorderActive   = lipgloss.NewStyle().Foreground(neonCyan)
+	frameBorderInactive = lipgloss.NewStyle().Foreground(subtle)
+	frameBorderActive   = lipgloss.NewStyle().Foreground(accent)
 
-	// ── status ──
-	statusOnline  = lipgloss.NewStyle().Foreground(neonGreen).Bold(true)
-	statusOffline = lipgloss.NewStyle().Foreground(neonRed)
-	statusLoading = lipgloss.NewStyle().Foreground(neonYellow).Bold(true)
+	statusOnline  = lipgloss.NewStyle().Foreground(ok).Bold(true)
+	statusOffline = lipgloss.NewStyle().Foreground(muted)
+	statusLoading = lipgloss.NewStyle().Foreground(warn).Bold(true)
 
-	// ── text ──
-	textErr    = lipgloss.NewStyle().Foreground(neonRed)
-	textMuted  = lipgloss.NewStyle().Foreground(greyMed)
-	textSubtle = lipgloss.NewStyle().Foreground(greyLow)
-	textBody   = lipgloss.NewStyle().Foreground(white)
+	textErr    = lipgloss.NewStyle().Foreground(danger)
+	textMuted  = lipgloss.NewStyle().Foreground(muted)
+	textSubtle = lipgloss.NewStyle().Foreground(subtle)
+	textBody   = lipgloss.NewStyle().Foreground(fg)
 
-	// ── input ──
 	inputPanel = lipgloss.NewStyle().
-			Border(lipgloss.DoubleBorder()).
-			BorderForeground(neonCyan).
+			Border(lipgloss.NormalBorder()).
+			BorderForeground(accent).
 			BorderTop(true).
 			BorderBottom(true).
 			BorderLeft(false).
 			BorderRight(false).
 			Padding(1, 0)
 
-	// ── list items ──
 	itemSelected = lipgloss.NewStyle().
-			Foreground(neonCyan).
-			Background(greyDark).
+			Foreground(accent).
+			Background(selBg).
 			Bold(true)
 	itemCurrent = lipgloss.NewStyle().
-			Foreground(neonGreen).
+			Foreground(ok).
 			Bold(true)
 	itemNormal = lipgloss.NewStyle().
-			Foreground(greyMed)
+			Foreground(muted)
 
-	// ── latency tiers ──
-	pingFast  = lipgloss.NewStyle().Foreground(neonGreen)
-	pingMid   = lipgloss.NewStyle().Foreground(neonYellow)
-	pingSlow  = lipgloss.NewStyle().Foreground(neonRed)
-	pingDead  = lipgloss.NewStyle().Foreground(greyMed)
+	pingFast = lipgloss.NewStyle().Foreground(ok)
+	pingMid  = lipgloss.NewStyle().Foreground(warn)
+	pingSlow = lipgloss.NewStyle().Foreground(danger)
+	pingDead = lipgloss.NewStyle().Foreground(muted)
 
-	// ── traffic ──
-	txColor = lipgloss.NewStyle().Foreground(neonCyan)
-	rxColor = lipgloss.NewStyle().Foreground(neonGreen)
+	txColor = lipgloss.NewStyle().Foreground(accent)
+	rxColor = lipgloss.NewStyle().Foreground(ok)
 
-	// ── divider ──
-	dividerStyle = lipgloss.NewStyle().Foreground(greyLow)
+	dividerStyle = lipgloss.NewStyle().Foreground(subtle)
 
-	// ── footer ──
-	footerKey    = lipgloss.NewStyle().Foreground(neonMag).Bold(true)
-	footerBracket = lipgloss.NewStyle().Foreground(greyLow)
-	footerLabel   = lipgloss.NewStyle().Foreground(greyMed)
-	footerSep     = lipgloss.NewStyle().Foreground(greyDark)
+	footerKey   = lipgloss.NewStyle().Foreground(accent).Bold(true)
+	footerLabel = lipgloss.NewStyle().Foreground(muted)
+	footerSep   = lipgloss.NewStyle().Foreground(subtle)
 
-	// ── section headers ──
 	sectionTitle = lipgloss.NewStyle().
-			Foreground(neonMag).
+			Foreground(accent).
 			Bold(true)
 
-	// ── data bars ──
-	barFull    = lipgloss.NewStyle().Foreground(neonGreen)
-	barWarning = lipgloss.NewStyle().Foreground(neonYellow)
-	barDanger  = lipgloss.NewStyle().Foreground(neonRed)
+	barFull    = lipgloss.NewStyle().Foreground(ok)
+	barWarning = lipgloss.NewStyle().Foreground(warn)
+	barDanger  = lipgloss.NewStyle().Foreground(danger)
 	barEmpty   = lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
 
-	// ── mode indicator ──
 	modeActive = lipgloss.NewStyle().
 			Foreground(lipgloss.Color("232")).
-			Background(neonCyan).
+			Background(accent).
 			Bold(true).
 			Padding(0, 1)
 )
@@ -194,9 +169,9 @@ type Model struct {
 
 func New(paths config.Paths, runner *core.Runner, client *api.Client, appVersion string) Model {
 	subURL, _ := config.LoadSubscriptionURL(paths.DataDir)
-	status := "按 [l] 管理订阅链接"
+	status := "按 l 管理订阅链接"
 	if subURL != "" {
-		status = "AUTO CONNECTING..."
+		status = "自动连接中…"
 	}
 
 	ti := textinput.New()
@@ -321,22 +296,22 @@ func (m Model) saveSubscription(url string) tea.Cmd {
 		}
 
 		msg := actionMsg{
-			status:  "SUBSCRIBED",
+			status:  "已订阅",
 			refresh: m.running,
 		}
 
 		if m.running {
 			if err := m.runner.Reload(); err != nil {
 				msg.err = err
-				msg.status = "RELOAD FAILED"
+				msg.status = "重载失败"
 				msg.refresh = false
 			} else {
 				mode := config.LoadMode(m.paths.DataDir, "rule")
 				if err := m.api.PatchMode(mode); err != nil {
 					msg.err = err
-					msg.status = "MODE SYNC FAILED"
+					msg.status = "模式同步失败"
 				} else {
-					msg.status = "SUBSCRIBED & RELOADED"
+					msg.status = "已订阅并重载"
 				}
 			}
 		}
@@ -393,12 +368,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case delayMsg:
 		if msg.err != nil {
-			m.status = "PING FAILED"
+			m.status = "测速失败"
 			m.err = msg.err.Error()
 			return m, nil
 		}
 		m.delays = msg.delays
-		m.status = "PING COMPLETE"
+		m.status = "测速完成"
 		m.err = ""
 		return m, nil
 
@@ -435,9 +410,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if msg.status != "" {
 				m.status = msg.status
 			} else if msg.added {
-				m.status = "LINK ADDED"
+				m.status = "已添加链接"
 			} else {
-				m.status = "LINK DELETED"
+				m.status = "已删除链接"
 			}
 		}
 		if msg.refresh {
@@ -468,7 +443,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.running = m.runner.Running()
 		if msg.err != nil {
 			m.err = msg.err.Error()
-			m.status = "CONNECT FAILED"
+			m.status = "连接失败"
 			return m, nil
 		}
 		m.running = true
@@ -528,7 +503,7 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.running {
 			err := m.runner.Stop()
 			m.running = false
-			m.status = "DISCONNECTED"
+			m.status = "已断开"
 			m.version = ""
 			m.nodes = nil
 			m.provider = api.ProxyProvider{}
@@ -546,7 +521,7 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case "r":
 		if !m.running {
-			m.status = "CONNECT FIRST"
+			m.status = "请先连接"
 			return m, nil
 		}
 		if err := m.runner.Reload(); err != nil {
@@ -558,34 +533,34 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.err = err.Error()
 			return m, nil
 		}
-		m.status = "RELOADED"
+		m.status = "已重载"
 		return m, refresh(m)
 
 	case "u":
 		if !m.running {
-			m.status = "CONNECT FIRST"
+			m.status = "请先连接"
 			return m, nil
 		}
-		m.status = "UPDATING..."
+		m.status = "更新中…"
 		return m, func() tea.Msg {
 			err := m.api.UpdateProvider(config.ProviderName)
 			if err != nil {
 				return actionMsg{err: err}
 			}
-			return actionMsg{status: "UPDATED", refresh: true}
+			return actionMsg{status: "订阅已更新", refresh: true}
 		}
 
 	case "t":
 		if !m.running {
-			m.status = "CONNECT FIRST"
+			m.status = "请先连接"
 			return m, nil
 		}
-		m.status = "PINGING..."
+		m.status = "测速中…"
 		return m, testDelay(m)
 
 	case "m":
 		if !m.running {
-			m.status = "CONNECT FIRST"
+			m.status = "请先连接"
 			return m, nil
 		}
 		next := nextMode(m.mode)
@@ -598,7 +573,7 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if err != nil {
 				return actionMsg{err: err}
 			}
-			return actionMsg{status: "MODE: " + modeLabel(next), refresh: true}
+			return actionMsg{status: "模式: " + modeLabel(next), refresh: true}
 		}
 
 	case "k", "up":
@@ -619,7 +594,7 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if err != nil {
 				return actionMsg{err: err}
 			}
-			return actionMsg{status: "SWITCHED → " + node, refresh: true}
+			return actionMsg{status: "已切换 → " + node, refresh: true}
 		}
 	}
 
@@ -631,17 +606,17 @@ func (m Model) beginConnect() (Model, tea.Cmd) {
 		return m, nil
 	}
 	if m.subscriptionURL == "" {
-		m.status = "CONNECT FAILED"
-		m.err = "按 [l] 添加订阅链接"
+		m.status = "连接失败"
+		m.err = "按 l 添加订阅链接"
 		return m, nil
 	}
 	if !core.TunBuildReady() {
-		m.status = "CONNECT FAILED"
+		m.status = "连接失败"
 		m.err = core.TunBuildHint()
 		return m, nil
 	}
 	m.starting = true
-	m.status = "CONNECTING..."
+	m.status = "连接中…"
 	m.err = ""
 	return m, m.startRunnerCmd()
 }
@@ -771,11 +746,11 @@ func newPanelFrame(width int, active bool) frame {
 }
 
 func (f frame) top() string {
-	return f.border.Render(strings.Repeat("═", f.width))
+	return f.border.Render(strings.Repeat("─", f.width))
 }
 
 func (f frame) bottom() string {
-	return f.border.Render(strings.Repeat("═", f.width))
+	return f.border.Render(strings.Repeat("─", f.width))
 }
 
 func (f frame) row(content string) string {
@@ -822,10 +797,7 @@ func lineCount(s string) int {
 	return n
 }
 
-// ═══════════════════════════════════════════════════════════════
-// HUD — Heads-Up Display stats
-// ═══════════════════════════════════════════════════════════════
-
+// Status panel — connection, traffic, quota
 func (m Model) renderHUD() string {
 	w := m.contentWidth()
 	f := newFrame(w)
@@ -845,13 +817,13 @@ func (m Model) renderHUD() string {
 
 	if info := m.provider.SubscriptionInfo; info != nil && info.Total > 0 {
 		used := info.Upload + info.Download
-		barLine := renderHPBar(used, info.Total, frameInner(w)-2)
+		barLine := renderUsageBar(used, info.Total, frameInner(w)-2)
 		b.WriteString(f.rowSpacedLeft(" " + barLine))
 		b.WriteString("\n")
 	}
 
 	if m.err != "" {
-		errLine := textErr.Render("⚠ " + truncateVisual(m.err, frameInner(w)-2))
+		errLine := textErr.Render("! " + truncateVisual(m.err, frameInner(w)-2))
 		b.WriteString(f.rowSpacedLeft(errLine))
 		b.WriteString("\n")
 	}
@@ -864,17 +836,17 @@ func (m Model) renderHUD() string {
 
 func (m Model) connectionLine() string {
 	if m.running {
-		return statusOnline.Render("● ONLINE")
+		return statusOnline.Render("● 已连接")
 	} else if m.starting {
-		return statusLoading.Render("◉ CONNECTING")
+		return statusLoading.Render("… 连接中")
 	}
-	return statusOffline.Render("○ OFFLINE")
+	return statusOffline.Render("○ 未连接")
 }
 
 func (m Model) metaLine() string {
 	var parts []string
 	if m.version != "" {
-		parts = append(parts, textSubtle.Render("KERN")+textBody.Render(" "+m.version))
+		parts = append(parts, textSubtle.Render("mihomo")+textBody.Render(" "+m.version))
 	}
 	if m.mode != "" {
 		label := modeLabel(m.mode)
@@ -885,19 +857,18 @@ func (m Model) metaLine() string {
 
 func (m Model) trafficGauge(width int) string {
 	if !m.running {
-		return textSubtle.Render("▲  --  ▼  --")
+		return textSubtle.Render("↑  --  ↓  --")
 	}
 
 	up := formatRate(m.traffic.Up)
 	down := formatRate(m.traffic.Down)
 
-	// build speed bars proportional to 1 MB/s
-	upBar := miniSpeedBar(m.traffic.Up, 8)
-	downBar := miniSpeedBar(m.traffic.Down, 8)
+	upBar := miniSpeedBar(m.traffic.Up, 6)
+	downBar := miniSpeedBar(m.traffic.Down, 6)
 
-	return txColor.Render("▲") + " " + up + " " + upBar +
+	return txColor.Render("↑") + " " + up + " " + upBar +
 		textSubtle.Render("  ") +
-		rxColor.Render("▼") + " " + down + " " + downBar
+		rxColor.Render("↓") + " " + down + " " + downBar
 }
 
 func miniSpeedBar(rate int64, width int) string {
@@ -927,13 +898,10 @@ func miniSpeedBar(rate int64, width int) string {
 }
 
 func (m Model) statusLine(width int) string {
-	return textSubtle.Render("> ") + textBody.Render(truncateVisual(m.status, width-2))
+	return textMuted.Render(truncateVisual(m.status, width))
 }
 
-// ═══════════════════════════════════════════════════════════════
-// PROXY PANEL — game inventory menu
-// ═══════════════════════════════════════════════════════════════
-
+// Proxy panel — node list
 func (m Model) renderProxyPanel() string {
 	w := m.contentWidth()
 	active := m.running && m.activeGroup != ""
@@ -947,12 +915,12 @@ func (m Model) renderProxyPanel() string {
 	b.WriteString(f.top())
 	b.WriteString("\n")
 
-	title := fmt.Sprintf(" %s ", m.activeGroup)
+	title := " 节点 "
 	if len(m.nodes) > 0 {
-		title = fmt.Sprintf(" %s [%d/%d] ", m.activeGroup, m.cursor+1, len(m.nodes))
+		title = fmt.Sprintf(" 节点 [%d/%d] ", m.cursor+1, len(m.nodes))
 	}
 	if m.group.Now != "" {
-		title += fmt.Sprintf(" ◆ %s ", m.group.Now)
+		title += "· " + m.group.Now + " "
 	}
 	b.WriteString(f.rowSpacedLeft(sectionTitle.Render(truncateVisual(title, inner))))
 	b.WriteString("\n")
@@ -981,7 +949,7 @@ func (m Model) renderNodeList(innerW int) string {
 		lines = append(lines, padVisual(textSubtle.Render("  "+m.emptyHint()), innerW))
 	} else {
 		if vp.showUpArrow {
-			hint := fmt.Sprintf("  △  %d more above", m.rowOffset)
+			hint := fmt.Sprintf("  △  上方还有 %d 个", m.rowOffset)
 			lines = append(lines, padVisual(textSubtle.Render(hint), innerW))
 		}
 
@@ -991,7 +959,7 @@ func (m Model) renderNodeList(innerW int) string {
 
 		if vp.showDownArrow {
 			remaining := total - vp.endIdx
-			hint := fmt.Sprintf("  ▽  %d more below", remaining)
+			hint := fmt.Sprintf("  ▽  下方还有 %d 个", remaining)
 			lines = append(lines, padVisual(textSubtle.Render(hint), innerW))
 		}
 	}
@@ -1002,13 +970,13 @@ func (m Model) renderNodeList(innerW int) string {
 func (m Model) emptyHint() string {
 	switch {
 	case m.starting:
-		return "... ESTABLISHING CONNECTION ..."
+		return "正在建立连接…"
 	case m.running:
-		return "... LOADING NODES ..."
+		return "加载节点中…"
 	case m.hasSubscription:
-		return "... AWAITING CONNECTION ..."
+		return "等待连接…"
 	default:
-		return "... PRESS [l] TO ADD SUBSCRIPTION ..."
+		return "按 l 添加订阅链接"
 	}
 }
 
@@ -1018,8 +986,10 @@ func (m Model) formatListItem(idx, width int) string {
 	current := node == m.group.Now
 
 	mark := "  "
-	if current {
-		mark = "◆ "
+	if active {
+		mark = "› "
+	} else if current {
+		mark = "● "
 	}
 
 	delayStr := ""
@@ -1036,7 +1006,7 @@ func (m Model) formatListItem(idx, width int) string {
 				delayStyle = pingSlow
 			}
 		} else {
-			delayStr = "TIMEOUT"
+			delayStr = "超时"
 			delayStyle = pingDead
 		}
 	}
@@ -1089,10 +1059,7 @@ func buildRow(width int, mark, name, delay string, rowStyle, delayStyle lipgloss
 	return rowStyle.Render(prefix) + delayStyle.Render(delay)
 }
 
-// ═══════════════════════════════════════════════════════════════
-// FOOTER — game control bar
-// ═══════════════════════════════════════════════════════════════
-
+// Footer — shortcut hints
 func (m Model) renderFooter() string {
 	w := m.contentWidth()
 	f := newFrame(w)
@@ -1103,24 +1070,24 @@ func (m Model) renderFooter() string {
 	b.WriteString("\n ")
 
 	keys := [][2]string{
-		{"L", "LINK"},
-		{"S", "CONN"},
-		{"M", "MODE"},
-		{"▲▼", "NAV"},
-		{"↵", "SEL"},
-		{"U", "UP"},
-		{"T", "PING"},
-		{"R", "REL"},
-		{"Q", "QUIT"},
+		{"l", "链接"},
+		{"s", "连接"},
+		{"m", "模式"},
+		{"↑↓", "选择"},
+		{"↵", "确认"},
+		{"u", "更新"},
+		{"t", "测速"},
+		{"r", "重载"},
+		{"q", "退出"},
 	}
 
 	inner := frameInner(w)
 	var parts []string
 	for _, k := range keys {
-		parts = append(parts, footerBracket.Render("[")+footerKey.Render(k[0])+footerBracket.Render("]")+footerLabel.Render(k[1]))
+		parts = append(parts, footerKey.Render(k[0])+footerLabel.Render(" "+k[1]))
 	}
 
-	full := strings.Join(parts, footerSep.Render("·"))
+	full := strings.Join(parts, footerSep.Render("  "))
 	if visualWidth(full) > inner {
 		parts = nil
 		for _, k := range keys {
@@ -1143,7 +1110,7 @@ func (m Model) listBudget() int {
 		return 8
 	}
 	used := lineCount(m.renderHUD()) +
-		5 + // blank + double border top + title + divider + double border bot
+		5 + // blank + border top + title + divider + border bottom
 		lineCount(m.renderFooter())
 	budget := m.height - used
 	if budget < 1 {
@@ -1237,8 +1204,8 @@ func truncateRunewidth(s string, max int) string {
 	return truncateVisual(s, max)
 }
 
-// HP bar — RPG health bar style [████████░░] LABEL
-func renderHPBar(used, total int64, width int) string {
+// Usage bar — subscription traffic quota
+func renderUsageBar(used, total int64, width int) string {
 	if total <= 0 || width < 8 {
 		return ""
 	}
@@ -1246,7 +1213,8 @@ func renderHPBar(used, total int64, width int) string {
 	if ratio > 1 {
 		ratio = 1
 	}
-	barWidth := width - 16 // reserve space for label
+	label := fmt.Sprintf(" %s/%s ", formatTraffic(used), formatTraffic(total))
+	barWidth := width - visualWidth(label) - 2
 	if barWidth < 4 {
 		barWidth = 4
 	}
@@ -1269,10 +1237,8 @@ func renderHPBar(used, total int64, width int) string {
 		fillStyle = barFull
 	}
 
-	label := fmt.Sprintf(" %s/%s ", formatTraffic(used), formatTraffic(total))
-
 	s := fillStyle.Render(strings.Repeat("█", filled))
-	s += barEmpty.Render(strings.Repeat("█", barWidth-filled))
+	s += barEmpty.Render(strings.Repeat("░", barWidth-filled))
 	s += textSubtle.Render(label)
 	return s
 }
@@ -1314,14 +1280,14 @@ func maskURL(url string) string {
 func modeLabel(mode string) string {
 	switch config.NormalizeMode(mode) {
 	case "global":
-		return "GLOBAL"
+		return "全局"
 	case "direct":
-		return "DIRECT"
+		return "直连"
 	case "rule":
-		return "RULE"
+		return "分流"
 	default:
 		if mode == "" {
-			return "RULE"
+			return "分流"
 		}
 		return mode
 	}
