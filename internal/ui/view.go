@@ -170,14 +170,8 @@ func (m Model) renderNodeList(innerW int) string {
 		return pad(textSubtle.Render("  "+m.emptyHint()), innerW)
 	}
 	var lines []string
-	if vp.showUp {
-		lines = append(lines, pad(textSubtle.Render(fmt.Sprintf("  △  上方还有 %d 个", m.rowOffset)), innerW))
-	}
 	for i := m.rowOffset; i < vp.end; i++ {
 		lines = append(lines, pad(m.formatListItem(i, innerW), innerW))
-	}
-	if vp.showDown {
-		lines = append(lines, pad(textSubtle.Render(fmt.Sprintf("  ▽  下方还有 %d 个", len(m.nodes)-vp.end)), innerW))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -427,38 +421,23 @@ func nextMode(current string) string {
 // --- viewport ---
 
 type viewport struct {
-	visible  int
-	showUp   bool
-	showDown bool
-	end      int
+	visible int
+	end     int
 }
 
 func computeViewport(total, offset, budget int) viewport {
 	if budget < 1 {
 		budget = 1
 	}
-	showUp := offset > 0
-	arrows := 0
-	if showUp {
-		arrows++
-	}
-	maxVis := budget - arrows
-	if maxVis < 1 {
-		maxVis = 1
-	}
-	showDown := offset+maxVis < total
-	if showDown {
-		arrows++
-	}
-	vis := budget - arrows
-	if vis < 1 {
-		vis = 1
-	}
-	end := offset + vis
+	end := offset + budget
 	if end > total {
 		end = total
 	}
-	return viewport{visible: vis, showUp: showUp, showDown: showDown, end: end}
+	vis := end - offset
+	if vis < 0 {
+		vis = 0
+	}
+	return viewport{visible: vis, end: end}
 }
 
 func (m Model) listBudget() int {

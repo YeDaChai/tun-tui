@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -188,9 +187,6 @@ func (m Model) viewLinkScreen() string {
 		b.WriteString(f.row(textSubtle.Render("  暂无链接 — 按 i 添加")) + "\n")
 	} else {
 		vp := m.linkViewport()
-		if vp.showUp {
-			b.WriteString(f.row(pad(textSubtle.Render(fmt.Sprintf("  △  上方还有 %d 个", m.linkRowOffset)), w)) + "\n")
-		}
 		for i := m.linkRowOffset; i < vp.end; i++ {
 			mark := "  "
 			if i == m.linkCursor {
@@ -204,9 +200,6 @@ func (m Model) viewLinkScreen() string {
 			}
 			item := buildRow(w, mark, maskURL(m.linkURLs[i]), "", style, itemNormal, full)
 			b.WriteString(f.row(pad(item, w)) + "\n")
-		}
-		if vp.showDown {
-			b.WriteString(f.row(pad(textSubtle.Render(fmt.Sprintf("  ▽  下方还有 %d 个", len(m.linkURLs)-vp.end)), w)) + "\n")
 		}
 	}
 
