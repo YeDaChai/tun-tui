@@ -95,11 +95,7 @@ var (
 	barDanger  = lipgloss.NewStyle().Foreground(danger)
 	barEmpty   = lipgloss.NewStyle().Foreground(lipgloss.Color("238"))
 
-	modeActive = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("232")).
-			Background(accent).
-			Bold(true).
-			Padding(0, 1)
+	modeActive = lipgloss.NewStyle().Foreground(accent).Bold(true)
 
 	rulesOn  = lipgloss.NewStyle().Foreground(ok).Bold(true)
 	rulesOff = lipgloss.NewStyle().Foreground(muted)
@@ -569,6 +565,8 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		next := nextMode(m.mode)
+		m.mode = next
+		m.status = ""
 		dataDir := m.paths.DataDir
 		return m, func() tea.Msg {
 			if err := config.SaveMode(dataDir, next); err != nil {
@@ -578,7 +576,7 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if err != nil {
 				return actionMsg{err: err}
 			}
-			return actionMsg{status: "模式: " + modeLabel(next), refresh: true}
+			return actionMsg{refresh: true}
 		}
 
 	case "k", "up":
@@ -854,8 +852,7 @@ func (m Model) metaLine() string {
 		parts = append(parts, textSubtle.Render("mihomo")+textBody.Render(" "+m.version))
 	}
 	if m.mode != "" {
-		label := modeLabel(m.mode)
-		parts = append(parts, modeActive.Render(" "+label+" "))
+		parts = append(parts, textSubtle.Render("模式: ")+modeActive.Render(modeLabel(m.mode)))
 	}
 	parts = append(parts, m.rulesStatus())
 	return strings.Join(parts, "  ")
