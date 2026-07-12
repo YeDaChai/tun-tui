@@ -32,7 +32,6 @@ type refreshMsg struct {
 	group           api.Proxy
 	provider        api.ProxyProvider
 	hasSubscription bool
-	nodeCrypto      string
 	autoTest        bool
 	err             error
 }
@@ -79,7 +78,6 @@ type Model struct {
 	height          int
 	busy            bool
 	loadingNodes    bool
-	nodeCrypto      string
 	spinner         int
 	settingsNote    string
 }
@@ -222,19 +220,6 @@ func refresh(m Model, autoTest bool) tea.Cmd {
 			hasSubscription: subURL != "",
 			autoTest:        autoTest,
 		}
-		if group.Now != "" {
-			apiType := ""
-			if node, ok := proxies.Proxies[group.Now]; ok {
-				apiType = node.Type
-			}
-			fileType, cipher := "", ""
-			if crypto := config.LoadProxyCryptoMap(m.paths.DataDir); crypto != nil {
-				if c, ok := crypto[group.Now]; ok {
-					fileType, cipher = c.Type, c.Cipher
-				}
-			}
-			msg.nodeCrypto = config.FormatProxyCrypto(apiType, fileType, cipher)
-		}
 		if providers, err := m.api.Providers(); err == nil {
 			if p, ok := providers.Providers[config.ProviderName]; ok {
 				msg.provider = p
@@ -305,7 +290,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.group = msg.group
 		m.provider = msg.provider
 		m.hasSubscription = msg.hasSubscription
-		m.nodeCrypto = msg.nodeCrypto
 		m.nodes = msg.group.All
 		m.clampListScroll()
 
@@ -529,7 +513,6 @@ func (m Model) beginNodesLoad() Model {
 	m.nodes = nil
 	m.delays = map[string]uint16{}
 	m.cursor, m.rowOffset = 0, 0
-	m.nodeCrypto = ""
 	return m
 }
 
@@ -546,7 +529,6 @@ func (m Model) resetIdleState() Model {
 	m.traffic = api.Traffic{}
 	m.group = api.Proxy{}
 	m.provider = api.ProxyProvider{}
-	m.nodeCrypto = ""
 	m.err = ""
 	m.syncSubscription()
 	return m

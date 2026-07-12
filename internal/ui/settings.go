@@ -81,7 +81,6 @@ func (m Model) applyClearedData(msg clearDataMsg) Model {
 	m.traffic = api.Traffic{}
 	m.group = api.Proxy{}
 	m.provider = api.ProxyProvider{}
-	m.nodeCrypto = ""
 	m.subscriptionURL = ""
 	m.hasSubscription = false
 	m.linkURLs = nil
