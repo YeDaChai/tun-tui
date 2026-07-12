@@ -291,10 +291,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, spinnerTick()
 
 	case refreshMsg:
+		// Drop stale polls that finish after S disconnect, or they paint the old UI back.
+		if !m.running {
+			return m, nil
+		}
 		if msg.err != nil {
-			if m.running {
-				m.err = msg.err.Error()
-			}
+			m.err = msg.err.Error()
 			return m, nil
 		}
 		m.err = ""
@@ -322,6 +324,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case delayOneMsg:
+		if !m.running {
+			return m, waitDelayResult(msg.more)
+		}
 		if m.delays == nil {
 			m.delays = map[string]uint16{}
 		}
@@ -370,7 +375,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			m.syncSubscription()
 		}
-		if msg.refresh {
+		if msg.refresh && m.running {
 			return m, refresh(m, msg.autoTest)
 		}
 		return m, nil
@@ -385,7 +390,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.syncSubscription()
 		m.linkInput.SetValue("")
-		if msg.refresh {
+		if msg.refresh && m.running {
 			return m, refresh(m, msg.autoTest)
 		}
 		return m, nil
@@ -441,18 +446,9 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		if m.running {
 			err := m.runner.Stop()
-			m.running = false
-			m.loadingNodes = false
-			m.busy = false
-			m.nodes = nil
-			m.nodeCrypto = ""
-			m.provider = api.ProxyProvider{}
-			m.delays = map[string]uint16{}
-			m.rowOffset, m.cursor = 0, 0
+			m = m.resetIdleState()
 			if err != nil {
 				m.err = err.Error()
-			} else {
-				m.err = ""
 			}
 			return m, nil
 		}
@@ -534,6 +530,25 @@ func (m Model) beginNodesLoad() Model {
 	m.delays = map[string]uint16{}
 	m.cursor, m.rowOffset = 0, 0
 	m.nodeCrypto = ""
+	return m
+}
+
+// resetIdleState restores the pre-connect UI, same as a fresh launch before Start.
+func (m Model) resetIdleState() Model {
+	m.running = false
+	m.starting = false
+	m.loadingNodes = false
+	m.busy = false
+	m.nodes = nil
+	m.delays = map[string]uint16{}
+	m.cursor, m.rowOffset = 0, 0
+	m.mode = ""
+	m.traffic = api.Traffic{}
+	m.group = api.Proxy{}
+	m.provider = api.ProxyProvider{}
+	m.nodeCrypto = ""
+	m.err = ""
+	m.syncSubscription()
 	return m
 }
 
