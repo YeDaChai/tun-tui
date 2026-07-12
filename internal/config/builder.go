@@ -145,6 +145,7 @@ func applyTunSettings(root map[string]any) {
 	root["geodata-mode"] = false
 	root["geo-auto-update"] = false
 	root["log-level"] = "warning"
+	root["unified-delay"] = true
 
 	if providers, ok := root["proxy-providers"].(map[string]any); ok {
 		if sub, ok := providers[ProviderName].(map[string]any); ok {

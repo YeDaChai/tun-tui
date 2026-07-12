@@ -240,19 +240,51 @@ func (c *Client) Traffic() (Traffic, error) {
 	return t, json.Unmarshal(line, &t)
 }
 
-func (c *Client) GroupDelay(group, testURL string) (map[string]uint16, error) {
+const delayTestURL = "https://www.gstatic.com/generate_204"
+
+// ProxyDelay runs Mihomo URLTest for a single proxy node.
+func (c *Client) ProxyDelay(name string) (uint16, error) {
 	path := fmt.Sprintf(
-		"/group/%s/delay?url=%s&timeout=5000",
-		url.PathEscape(group),
-		url.QueryEscape(testURL),
+		"/proxies/%s/delay?url=%s&timeout=5000&expected=204",
+		url.PathEscape(name),
+		url.QueryEscape(delayTestURL),
 	)
-	data, err := c.request(http.MethodGet, path, nil)
+	req, err := http.NewRequest(http.MethodGet, c.base+path, nil)
 	if err != nil {
-		return nil, err
+		return 0, err
+	}
+	if c.secret != "" {
+		req.Header.Set("Authorization", "Bearer "+c.secret)
 	}
 
-	var delays map[string]uint16
-	return delays, json.Unmarshal(data, &delays)
+	client := *c.http
+	client.Timeout = 8 * time.Second
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	defer resp.Body.Close()
+
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return 0, err
+	}
+	if resp.StatusCode >= 400 {
+		return 0, &HTTPError{
+			Method:     http.MethodGet,
+			Path:       path,
+			StatusCode: resp.StatusCode,
+			Status:     resp.Status,
+		}
+	}
+
+	var out struct {
+		Delay uint16 `json:"delay"`
+	}
+	if err := json.Unmarshal(data, &out); err != nil {
+		return 0, err
+	}
+	return out.Delay, nil
 }
 
 func (c *Client) Providers() (ProvidersResponse, error) {

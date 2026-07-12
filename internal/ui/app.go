@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
@@ -14,8 +15,6 @@ import (
 	"tun-tui/internal/config"
 	"tun-tui/internal/core"
 )
-
-const testURL = "https://www.gstatic.com/generate_204"
 
 type screen int
 
@@ -35,10 +34,12 @@ type refreshMsg struct {
 	nodeCrypto      string
 	err             error
 }
-type delayMsg struct {
-	delays map[string]uint16
-	err    error
+type delayOneMsg struct {
+	name  string
+	delay uint16
+	more  <-chan delayOneMsg
 }
+type delayDoneMsg struct{}
 type actionMsg struct {
 	err     error
 	refresh bool
@@ -126,6 +127,54 @@ func (m Model) Init() tea.Cmd {
 
 func tick() tea.Cmd {
 	return tea.Tick(2*time.Second, func(time.Time) tea.Msg { return tickMsg{} })
+}
+
+const delayConcurrency = 8
+
+func startDelayTest(client *api.Client, nodes []string) tea.Cmd {
+	names := make([]string, 0, len(nodes))
+	for _, n := range nodes {
+		if n == "" || n == "DIRECT" || n == "REJECT" {
+			continue
+		}
+		names = append(names, n)
+	}
+	if len(names) == 0 {
+		return func() tea.Msg { return delayDoneMsg{} }
+	}
+
+	ch := make(chan delayOneMsg, delayConcurrency)
+	go func() {
+		defer close(ch)
+		sem := make(chan struct{}, delayConcurrency)
+		var wg sync.WaitGroup
+		for _, name := range names {
+			wg.Add(1)
+			go func(name string) {
+				defer wg.Done()
+				sem <- struct{}{}
+				defer func() { <-sem }()
+				d, err := client.ProxyDelay(name)
+				if err != nil {
+					d = 0
+				}
+				ch <- delayOneMsg{name: name, delay: d}
+			}(name)
+		}
+		wg.Wait()
+	}()
+	return waitDelayResult(ch)
+}
+
+func waitDelayResult(ch <-chan delayOneMsg) tea.Cmd {
+	return func() tea.Msg {
+		msg, ok := <-ch
+		if !ok {
+			return delayDoneMsg{}
+		}
+		msg.more = ch
+		return msg
+	}
 }
 
 func refresh(m Model) tea.Cmd {
@@ -250,13 +299,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
-	case delayMsg:
-		m.busy = false
-		if msg.err != nil {
-			m.err = msg.err.Error()
-			return m, nil
+	case delayOneMsg:
+		if m.delays == nil {
+			m.delays = map[string]uint16{}
 		}
-		m.delays, m.err = msg.delays, ""
+		m.delays[msg.name] = msg.delay
+		m.err = ""
+		return m, waitDelayResult(msg.more)
+
+	case delayDoneMsg:
+		m.busy = false
 		return m, nil
 
 	case linkMsg:
@@ -397,11 +449,14 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.busy {
 			return m, nil
 		}
-		m.busy = true
-		return m, func() tea.Msg {
-			delays, err := m.api.GroupDelay(m.activeGroup, testURL)
-			return delayMsg{delays: delays, err: err}
+		if len(m.nodes) == 0 {
+			m.err = "暂无节点"
+			return m, nil
 		}
+		m.busy = true
+		m.err = ""
+		m.delays = map[string]uint16{}
+		return m, startDelayTest(m.api, m.nodes)
 	case "m":
 		if !m.running {
 			m.err = "请先连接"

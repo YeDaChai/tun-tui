@@ -45,9 +45,8 @@ var (
 	itemNormal   = lipgloss.NewStyle().Foreground(muted)
 	pingFast     = lipgloss.NewStyle().Foreground(ok)
 	pingMid      = lipgloss.NewStyle().Foreground(warn)
-	pingSlow     = lipgloss.NewStyle().Foreground(danger)
-	pingDead     = lipgloss.NewStyle().Foreground(subtle)
-	txColor      = lipgloss.NewStyle().Foreground(accent)
+	pingSlow = lipgloss.NewStyle().Foreground(danger)
+	txColor  = lipgloss.NewStyle().Foreground(accent)
 	rxColor      = lipgloss.NewStyle().Foreground(ok)
 	dividerStyle = lipgloss.NewStyle().Foreground(subtle)
 	footerKey    = lipgloss.NewStyle().Foreground(accent).Bold(true)
@@ -218,7 +217,7 @@ func (m Model) formatListItem(idx, width int) string {
 				delayStyle = pingSlow
 			}
 		} else {
-			delayStr, delayStyle = "超时", pingDead
+			delayStr, delayStyle = "连接失败", pingSlow
 		}
 	}
 
