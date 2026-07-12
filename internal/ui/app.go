@@ -512,7 +512,7 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		node := m.nodes[m.cursor]
-		m = m.beginNodesLoad()
+		m.busy = true
 		return m, func() tea.Msg {
 			if err := m.api.SelectProxy(api.DefaultProxyGroup, node); err != nil {
 				return actionMsg{err: err}
