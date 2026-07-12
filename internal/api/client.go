@@ -3,6 +3,7 @@ package api
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -247,13 +248,13 @@ func (c *Client) Traffic() (Traffic, error) {
 const delayTestURL = "https://www.gstatic.com/generate_204"
 
 // ProxyDelay runs Mihomo URLTest for a single proxy node.
-func (c *Client) ProxyDelay(name string) (uint16, error) {
+func (c *Client) ProxyDelay(ctx context.Context, name string) (uint16, error) {
 	path := fmt.Sprintf(
 		"/proxies/%s/delay?url=%s&timeout=5000&expected=204",
 		url.PathEscape(name),
 		url.QueryEscape(delayTestURL),
 	)
-	req, err := http.NewRequest(http.MethodGet, c.base+path, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil)
 	if err != nil {
 		return 0, err
 	}
@@ -332,11 +333,9 @@ type Configs struct {
 }
 
 type Proxy struct {
-	Name  string   `json:"name"`
-	Type  string   `json:"type"`
-	Now   string   `json:"now"`
-	All   []string `json:"all"`
-	Alive bool     `json:"alive"`
+	Name string   `json:"name"`
+	Now  string   `json:"now"`
+	All  []string `json:"all"`
 }
 
 type ProxiesResponse struct {
@@ -344,25 +343,18 @@ type ProxiesResponse struct {
 }
 
 type Traffic struct {
-	Up        int64 `json:"up"`
-	Down      int64 `json:"down"`
-	UpTotal   int64 `json:"upTotal"`
-	DownTotal int64 `json:"downTotal"`
+	Up   int64 `json:"up"`
+	Down int64 `json:"down"`
 }
 
 type SubscriptionInfo struct {
 	Upload   int64 `json:"upload"`
 	Download int64 `json:"download"`
 	Total    int64 `json:"total"`
-	Expire   int64 `json:"expire"`
 }
 
 type ProxyProvider struct {
 	Name             string            `json:"name"`
-	Type             string            `json:"type"`
-	VehicleType      string            `json:"vehicleType"`
-	Proxies          []Proxy           `json:"proxies"`
-	UpdatedAt        string            `json:"updatedAt"`
 	SubscriptionInfo *SubscriptionInfo `json:"subscriptionInfo"`
 }
 

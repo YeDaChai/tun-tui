@@ -26,28 +26,28 @@ var (
 	statusOnline      = lipgloss.NewStyle().Foreground(ok).Bold(true)
 	statusOffline     = lipgloss.NewStyle().Foreground(muted)
 	statusLoading     = lipgloss.NewStyle().Foreground(warn).Bold(true)
-	textErr    = lipgloss.NewStyle().Foreground(danger)
-	textSubtle = lipgloss.NewStyle().Foreground(muted)
-	itemSelected = lipgloss.NewStyle().
-			Foreground(suggest).
-			Background(selBg).
-			Bold(true)
+	textErr           = lipgloss.NewStyle().Foreground(danger)
+	textSubtle        = lipgloss.NewStyle().Foreground(muted)
+	itemSelected      = lipgloss.NewStyle().
+				Foreground(suggest).
+				Background(selBg).
+				Bold(true)
 	itemCurrent  = lipgloss.NewStyle().Foreground(ok).Bold(true)
 	itemNormal   = lipgloss.NewStyle().Foreground(muted)
 	pingFast     = lipgloss.NewStyle().Foreground(ok)
 	pingMid      = lipgloss.NewStyle().Foreground(warn)
-	pingSlow = lipgloss.NewStyle().Foreground(danger)
-	txColor  = lipgloss.NewStyle().Foreground(accent)
+	pingSlow     = lipgloss.NewStyle().Foreground(danger)
+	txColor      = lipgloss.NewStyle().Foreground(accent)
 	rxColor      = lipgloss.NewStyle().Foreground(ok)
 	dividerStyle = lipgloss.NewStyle().Foreground(subtle)
 	footerKey    = lipgloss.NewStyle().Foreground(accent).Bold(true)
 	footerLabel  = lipgloss.NewStyle().Foreground(muted)
 	footerSep    = lipgloss.NewStyle().Foreground(subtle)
 	sectionTitle = lipgloss.NewStyle().Foreground(accent).Bold(true)
-	barFull    = lipgloss.NewStyle().Foreground(ok)
-	barWarning = lipgloss.NewStyle().Foreground(warn)
-	barDanger  = lipgloss.NewStyle().Foreground(danger)
-	modeActive = lipgloss.NewStyle().Foreground(accent).Bold(true)
+	barFull      = lipgloss.NewStyle().Foreground(ok)
+	barWarning   = lipgloss.NewStyle().Foreground(warn)
+	barDanger    = lipgloss.NewStyle().Foreground(danger)
+	modeActive   = lipgloss.NewStyle().Foreground(accent).Bold(true)
 )
 
 func (m Model) View() string {
@@ -79,6 +79,23 @@ func (m Model) contentWidth() int {
 		return 80
 	}
 	return m.width
+}
+
+func (m Model) modalWidth(max int) int {
+	w := m.contentWidth() - 8
+	if w > max {
+		w = max
+	}
+	if w < 36 {
+		w = m.contentWidth()
+		if w > 36 {
+			w = 36
+		}
+	}
+	if w < 24 {
+		w = 24
+	}
+	return w
 }
 
 func (m Model) renderHUD() string {
@@ -136,7 +153,7 @@ func (m Model) renderProxyPanel() string {
 	if w < 16 {
 		w = 16
 	}
-	f := newFrame(w, m.running && m.activeGroup != "")
+	f := newFrame(w, m.running)
 	var b strings.Builder
 	b.WriteString(f.top() + "\n")
 

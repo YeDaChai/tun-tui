@@ -30,9 +30,9 @@ func BuildConfigBytes(dataDir, cfgPath, apiSecret string) ([]byte, error) {
 		if err := ClearProviderCache(dataDir); err != nil {
 			return nil, err
 		}
-		if err := applySubscriptionURL(root, subURL); err != nil {
-			return nil, err
-		}
+	}
+	if err := applyProvider(root, subURL); err != nil {
+		return nil, err
 	}
 
 	applyTunSettings(root)
@@ -47,12 +47,11 @@ func BuildConfigBytes(dataDir, cfgPath, apiSecret string) ([]byte, error) {
 	return out, nil
 }
 
-func applySubscriptionURL(root map[string]any, subURL string) error {
+func applyProvider(root map[string]any, subURL string) error {
 	providers, ok := root["proxy-providers"].(map[string]any)
 	if !ok {
 		return fmt.Errorf("config.yaml 缺少 proxy-providers 配置")
 	}
-
 	provider, ok := providers[ProviderName].(map[string]any)
 	if !ok {
 		return fmt.Errorf("config.yaml 缺少 proxy-providers.%s 配置", ProviderName)
@@ -60,16 +59,32 @@ func applySubscriptionURL(root map[string]any, subURL string) error {
 
 	provider["type"] = "http"
 	provider["path"] = "./providers/subscription.yaml"
-	provider["url"] = subURL
-	// Always fetch on connect/update via API; do not reuse a local node list.
-	provider["interval"] = 0
+	provider["interval"] = 0 // fetch on connect/update via API
+	if subURL != "" {
+		provider["url"] = subURL
+	}
+
+	hc, _ := provider["health-check"].(map[string]any)
+	if hc == nil {
+		hc = map[string]any{}
+	}
+	hc["enable"] = true
+	hc["lazy"] = true
+	if hc["interval"] == nil {
+		hc["interval"] = 300
+	}
+	if hc["url"] == nil {
+		hc["url"] = "https://www.gstatic.com/generate_204"
+	}
+	provider["health-check"] = hc
+
 	providers[ProviderName] = provider
 	root["proxy-providers"] = providers
 	return nil
 }
 
 func applyController(root map[string]any, secret string) {
-	root["external-controller"] = "127.0.0.1:9090"
+	root["external-controller"] = APIControllerAddr
 	root["allow-lan"] = false
 	if secret != "" {
 		root["secret"] = secret
@@ -146,30 +161,6 @@ func applyTunSettings(root map[string]any) {
 	root["geo-auto-update"] = false
 	root["log-level"] = "warning"
 	root["unified-delay"] = true
-
-	if providers, ok := root["proxy-providers"].(map[string]any); ok {
-		if sub, ok := providers[ProviderName].(map[string]any); ok {
-			hc, _ := sub["health-check"].(map[string]any)
-			if hc == nil {
-				hc = map[string]any{}
-			}
-			hc["enable"] = true
-			hc["lazy"] = true
-			if hc["interval"] == nil {
-				hc["interval"] = 300
-			}
-			if hc["url"] == nil {
-				hc["url"] = "https://www.gstatic.com/generate_204"
-			}
-			sub["type"] = "http"
-			sub["path"] = "./providers/subscription.yaml"
-			sub["interval"] = 0
-			sub["health-check"] = hc
-			providers[ProviderName] = sub
-			root["proxy-providers"] = providers
-		}
-	}
-
 	root["tun"] = tun
 }
 

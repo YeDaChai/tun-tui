@@ -9,11 +9,11 @@ import (
 
 const ProviderName = "subscription"
 
-func SubscriptionFile(dataDir string) string {
+func subscriptionFile(dataDir string) string {
 	return filepath.Join(dataDir, "subscription.url")
 }
 
-func SubscriptionLinksFile(dataDir string) string {
+func subscriptionLinksFile(dataDir string) string {
 	return filepath.Join(dataDir, "subscription.links")
 }
 
@@ -29,7 +29,7 @@ func LoadSubscriptionURL(dataDir string) (string, error) {
 }
 
 func LoadSubscriptionLinks(dataDir string) ([]string, int, error) {
-	linksPath := SubscriptionLinksFile(dataDir)
+	linksPath := subscriptionLinksFile(dataDir)
 	data, err := os.ReadFile(linksPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -66,13 +66,13 @@ func SaveSubscriptionLinks(dataDir string, urls []string, active int) error {
 		}
 	}
 
-	path := SubscriptionLinksFile(dataDir)
+	path := subscriptionLinksFile(dataDir)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
 	if len(clean) == 0 {
 		_ = os.Remove(path)
-		_ = os.Remove(SubscriptionFile(dataDir))
+		_ = os.Remove(subscriptionFile(dataDir))
 		return nil
 	}
 
@@ -82,7 +82,7 @@ func SaveSubscriptionLinks(dataDir string, urls []string, active int) error {
 	_ = chownToSudoUser(path)
 
 	// Keep legacy single-url file in sync for external tooling.
-	legacyPath := SubscriptionFile(dataDir)
+	legacyPath := subscriptionFile(dataDir)
 	if err := os.WriteFile(legacyPath, []byte(clean[active]+"\n"), 0o600); err != nil {
 		return err
 	}
@@ -148,7 +148,7 @@ func DeleteSubscriptionLink(dataDir string, index int) error {
 }
 
 func loadLegacySubscriptionURL(dataDir string) (string, error) {
-	path := SubscriptionFile(dataDir)
+	path := subscriptionFile(dataDir)
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {

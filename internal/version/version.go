@@ -8,10 +8,6 @@ var (
 	BuildDate = "unknown"
 )
 
-func String() string {
-	return Version
-}
-
 func Full() string {
 	if Commit == "none" {
 		return fmt.Sprintf("%s (%s)", Version, BuildDate)

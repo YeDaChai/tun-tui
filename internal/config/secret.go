@@ -9,13 +9,13 @@ import (
 	"strings"
 )
 
-func APISecretFile(dataDir string) string {
+func apiSecretFile(dataDir string) string {
 	return filepath.Join(dataDir, "api.secret")
 }
 
 // LoadOrCreateAPISecret returns a per-install secret for the local controller.
 func LoadOrCreateAPISecret(dataDir string) (string, error) {
-	path := APISecretFile(dataDir)
+	path := apiSecretFile(dataDir)
 	if data, err := os.ReadFile(path); err == nil {
 		if s := strings.TrimSpace(string(data)); s != "" {
 			return s, nil

@@ -7,7 +7,7 @@ import (
 
 const providerCacheFile = "subscription.yaml"
 
-func ProviderCachePath(dataDir string) string {
+func providerCachePath(dataDir string) string {
 	return filepath.Join(dataDir, "providers", providerCacheFile)
 }
 
@@ -17,7 +17,7 @@ func ClearProviderCache(dataDir string) error {
 		return err
 	}
 	_ = chownToSudoUser(filepath.Join(dataDir, "providers"))
-	_ = os.Remove(ProviderCachePath(dataDir))
+	_ = os.Remove(providerCachePath(dataDir))
 	_ = os.Remove(filepath.Join(dataDir, "providers", "subscription.source"))
 	return nil
 }

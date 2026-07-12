@@ -7,21 +7,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"tun-tui/internal/api"
 	"tun-tui/internal/config"
 )
-
-type linkMsg struct {
-	added    bool
-	deleted  bool
-	err      error
-	refresh  bool
-	autoTest bool
-}
-
-func fetchProviderNodes(client *api.Client) error {
-	return client.UpdateProvider(config.ProviderName)
-}
 
 func (m Model) openLinkScreen() Model {
 	urls, active, err := config.LoadSubscriptionLinks(m.paths.DataDir)
@@ -103,6 +90,7 @@ func (m Model) updateLinkList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m.closeLinkScreen(), m.selectLink(m.linkCursor)
 	case "ctrl+c":
+		m.stopDelayTest()
 		_ = m.runner.Stop()
 		return m, tea.Quit
 	}
@@ -135,6 +123,7 @@ func (m Model) updateLinkInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, m.addLink(url)
 	case "ctrl+c":
+		m.stopDelayTest()
 		_ = m.runner.Stop()
 		return m, tea.Quit
 	}
@@ -143,62 +132,58 @@ func (m Model) updateLinkInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// reloadActiveSubscription reloads the kernel after the active subscription changes.
+func (m Model) reloadActiveSubscription(base actionMsg) tea.Msg {
+	if !m.running {
+		return base
+	}
+	if err := reloadAndSyncMode(m.runner, m.api, m.paths.DataDir); err != nil {
+		base.err = err
+		return base
+	}
+	if err := m.api.UpdateProvider(config.ProviderName); err != nil {
+		base.err = err
+		return base
+	}
+	base.refresh, base.autoTest = true, true
+	return base
+}
+
 func (m Model) selectLink(index int) tea.Cmd {
 	return func() tea.Msg {
 		if err := config.SetActiveSubscriptionLink(m.paths.DataDir, index); err != nil {
 			return actionMsg{err: err}
 		}
-		if !m.running {
-			return actionMsg{}
-		}
-		if err := reloadAndSyncMode(m.runner, m.api, m.paths.DataDir); err != nil {
-			return actionMsg{err: err}
-		}
-		if err := fetchProviderNodes(m.api); err != nil {
-			return actionMsg{err: err}
-		}
-		return actionMsg{refresh: true, autoTest: true}
+		return m.reloadActiveSubscription(actionMsg{})
 	}
 }
 
 func (m Model) addLink(url string) tea.Cmd {
 	return func() tea.Msg {
+		base := actionMsg{added: true}
 		if err := config.AddSubscriptionLink(m.paths.DataDir, url); err != nil {
-			return linkMsg{err: err}
+			return actionMsg{err: err}
 		}
-		if !m.running {
-			return linkMsg{added: true}
-		}
-		if err := reloadAndSyncMode(m.runner, m.api, m.paths.DataDir); err != nil {
-			return linkMsg{added: true, err: err}
-		}
-		if err := fetchProviderNodes(m.api); err != nil {
-			return linkMsg{added: true, err: err}
-		}
-		return linkMsg{added: true, refresh: true, autoTest: true}
+		return m.reloadActiveSubscription(base)
 	}
 }
 
 func (m Model) deleteLink(index int) tea.Cmd {
 	return func() tea.Msg {
+		base := actionMsg{deleted: true}
 		wasActive := index == m.linkActive
 		if err := config.DeleteSubscriptionLink(m.paths.DataDir, index); err != nil {
-			return linkMsg{err: err}
+			return actionMsg{err: err}
 		}
 		urls, _, err := config.LoadSubscriptionLinks(m.paths.DataDir)
 		if err != nil {
-			return linkMsg{deleted: true, err: err}
+			base.err = err
+			return base
 		}
-		if !m.running || !wasActive || len(urls) == 0 {
-			return linkMsg{deleted: true}
+		if !wasActive || len(urls) == 0 {
+			return base
 		}
-		if err := reloadAndSyncMode(m.runner, m.api, m.paths.DataDir); err != nil {
-			return linkMsg{deleted: true, err: err}
-		}
-		if err := fetchProviderNodes(m.api); err != nil {
-			return linkMsg{deleted: true, err: err}
-		}
-		return linkMsg{deleted: true, refresh: true, autoTest: true}
+		return m.reloadActiveSubscription(base)
 	}
 }
 
@@ -218,25 +203,8 @@ func (m Model) viewLinkScreen() string {
 	return overlayCenter(bg, m.renderLinkListBox(), w, h)
 }
 
-func (m Model) linkModalWidth() int {
-	w := m.contentWidth() - 8
-	if w > 64 {
-		w = 64
-	}
-	if w < 36 {
-		w = m.contentWidth()
-		if w > 36 {
-			w = 36
-		}
-	}
-	if w < 24 {
-		w = 24
-	}
-	return w
-}
-
 func (m Model) renderLinkListBox() string {
-	modalW := m.linkModalWidth()
+	modalW := m.modalWidth(64)
 	innerW := modalW - 4
 	if innerW < 20 {
 		innerW = 20
@@ -287,7 +255,7 @@ func (m Model) renderLinkListBox() string {
 }
 
 func (m Model) renderAddLinkBox() string {
-	modalW := m.linkModalWidth()
+	modalW := m.modalWidth(64)
 	innerW := modalW - 4
 	if innerW < 20 {
 		innerW = 20

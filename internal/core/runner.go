@@ -45,12 +45,6 @@ func (r *Runner) SetSecret(secret string) {
 	r.secret = secret
 }
 
-func (r *Runner) Running() bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.running
-}
-
 func (r *Runner) Start() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -207,7 +201,7 @@ func verifyTunStarted(dataDir string, offset int64) error {
 	// Positive check: external controller must accept connections.
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		conn, err := net.DialTimeout("tcp", "127.0.0.1:9090", 200*time.Millisecond)
+		conn, err := net.DialTimeout("tcp", config.APIControllerAddr, 200*time.Millisecond)
 		if err == nil {
 			_ = conn.Close()
 			return nil
@@ -217,7 +211,7 @@ func verifyTunStarted(dataDir string, offset int64) error {
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
-	return fmt.Errorf("内核未响应控制端口 9090，启动可能失败；详见 mihomo.log")
+	return fmt.Errorf("内核未响应控制端口 %s，启动可能失败；详见 mihomo.log", config.APIControllerAddr)
 }
 
 func scanTunStartErrors(dataDir string, offset int64) error {
@@ -229,7 +223,7 @@ func scanTunStartErrors(dataDir string, offset int64) error {
 	for i := len(lines) - 1; i >= 0; i-- {
 		line := lines[i]
 		if strings.Contains(line, "External controller listen error") && strings.Contains(line, "address already in use") {
-			return fmt.Errorf("控制端口 9090 被占用（常见于 Clash / ClashLite 的 Tunnel 进程仍在运行），请完全退出后再试")
+			return fmt.Errorf("控制端口 %s 被占用（常见于 Clash / ClashLite 的 Tunnel 进程仍在运行），请完全退出后再试", config.APIControllerAddr)
 		}
 		if strings.Contains(line, "can't initial GeoSite") || strings.Contains(line, "can't initial GeoIP") {
 			return fmt.Errorf("地理数据初始化失败，请重试或检查网络；详见 mihomo.log")

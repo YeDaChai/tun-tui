@@ -6,7 +6,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"tun-tui/internal/api"
 	"tun-tui/internal/config"
 )
 
@@ -43,6 +42,7 @@ func (m Model) updateSettingsScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.err = ""
 		return m, m.clearDataCmd()
 	case "ctrl+c", "q":
+		m.stopDelayTest()
 		_ = m.runner.Stop()
 		return m, tea.Quit
 	}
@@ -71,22 +71,12 @@ func (m Model) applyClearedData(msg clearDataMsg) Model {
 	m.api.SetSecret(msg.secret)
 	m.runner.SetSecret(msg.secret)
 
-	m.running = false
-	m.starting = false
-	m.loadingNodes = false
-	m.nodes = nil
-	m.delays = map[string]uint16{}
-	m.cursor, m.rowOffset = 0, 0
-	m.mode = ""
-	m.traffic = api.Traffic{}
-	m.group = api.Proxy{}
-	m.provider = api.ProxyProvider{}
+	m = m.resetIdleState()
 	m.subscriptionURL = ""
 	m.hasSubscription = false
 	m.linkURLs = nil
 	m.linkActive = -1
 	m.linkCursor, m.linkRowOffset = 0, 0
-	m.err = ""
 	m.settingsNote = "已清理本地数据，请重新添加订阅"
 	return m
 }
@@ -103,25 +93,8 @@ func (m Model) viewSettingsScreen() string {
 	return overlayCenter(m.viewMain(), m.renderSettingsBox(), w, h)
 }
 
-func (m Model) settingsModalWidth() int {
-	w := m.contentWidth() - 8
-	if w > 56 {
-		w = 56
-	}
-	if w < 36 {
-		w = m.contentWidth()
-		if w > 36 {
-			w = 36
-		}
-	}
-	if w < 28 {
-		w = 28
-	}
-	return w
-}
-
 func (m Model) renderSettingsBox() string {
-	modalW := m.settingsModalWidth()
+	modalW := m.modalWidth(56)
 	innerW := modalW - 4
 	if innerW < 20 {
 		innerW = 20

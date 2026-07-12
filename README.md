@@ -23,20 +23,6 @@ sudo tun-tui
 
 macOS 若提示无法验证：运行 `xattr -d com.apple.quarantine ./tun-tui`
 
-## 订阅链接
-
-首次使用需配置机场订阅。在 TUI 中按 `l` 打开链接管理，可添加多个订阅并切换使用：
-
-| 按键 | 功能 |
-|------|------|
-| `l` | 打开 / 关闭链接管理 |
-| `i` / `a` | 添加新链接 |
-| `Enter` | 使用选中的链接 |
-| `d` | 删除选中的链接 |
-| `j` / `k` 或 `↑` / `↓` | 在列表中移动 |
-
-链接保存在数据目录的 `subscription.links`（当前使用的链接以 `*` 标记），同时会同步写入 `subscription.url` 以兼容外部工具。
-
 ## 快捷键
 
 | 按键 | 功能 |
@@ -48,36 +34,54 @@ macOS 若提示无法验证：运行 `xattr -d com.apple.quarantine ./tun-tui`
 | `T` | 测速 |
 | `U` | 更新订阅 |
 | `L` | 管理订阅链接 |
-| `P` | 设置（数据目录 / Git） |
+| `P` | 设置 |
 | `Q` | 退出 |
 
-列表超出屏幕时可用方向键滚动。
+列表超出屏幕时可用方向键滚动。有订阅时启动会自动连接。
+
+### 订阅链接（`L`）
+
+| 按键 | 功能 |
+|------|------|
+| `I` / `A` | 添加链接 |
+| `Enter` | 使用选中链接 |
+| `D` | 删除选中链接 |
+| `Esc` | 关闭 |
+
+链接保存在数据目录的 `subscription.links`（当前链接以 `*` 标记），并同步写入 `subscription.url`。
+
+### 设置（`P`）
+
+| 按键 | 功能 |
+|------|------|
+| `D` | 清理本地数据（订阅、缓存、secret 等） |
+| `Esc` | 关闭 |
 
 ## 分流（RULE）
 
-内嵌 GeoIP / GeoSite 数据库（编译进二进制，无需下载）。分流模式下按 Clash/Mihomo 常见策略：
+内嵌 GeoIP / GeoSite（编译进二进制，无需下载）。分流策略：
 
 | 流量 | 动作 |
 |------|------|
 | 局域网 / 私有域名 | 直连 |
 | 广告域名（`category-ads-all`） | 拦截 |
 | 国内域名 / 中国 IP | 直连 |
-| 其余 | 走你选的代理节点 |
+| 其余 | 走所选代理节点 |
 
-按 `m` 可在 分流 / 全局 / 直连 之间切换。HUD「规则 开」表示地理数据已就绪。
-
-订阅地址仅允许公网 `http/https`；本机/内网地址会被拒绝。本地控制 API 绑定 `127.0.0.1:9090` 并启用随机 secret。
+订阅地址仅允许公网 `http/https`；本机/内网地址会被拒绝。本地控制 API 绑定 `127.0.0.1:9090`，使用随机 secret。
 
 异常退出后无法上网：`sudo tun-tui -cleanup`
 
 ## 开发
 
 ```bash
-make build      # 编译
-make run        # 运行（需 sudo）
-make release    # 打包到 dist/
+make build       # 本机编译
+make build-all   # 全平台交叉编译
+make run         # 编译并以管理员运行（数据目录 ./data）
+make release     # 打包到 dist/
+make help        # 查看全部目标
 ```
 
-发布：`git tag v0.1.8 && git push origin v0.1.8`
+发布：`git tag v0.2.2 && git push origin v0.2.2`
 
 MIT

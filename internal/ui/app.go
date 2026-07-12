@@ -45,6 +45,8 @@ type actionMsg struct {
 	err      error
 	refresh  bool
 	autoTest bool
+	added    bool
+	deleted  bool
 }
 type startMsg struct{ err error }
 type autoConnectMsg struct{}
@@ -66,13 +68,13 @@ type Model struct {
 	mode            string
 	traffic         api.Traffic
 	group           api.Proxy
-	activeGroup     string
 	provider        api.ProxyProvider
 	hasSubscription bool
 	nodes           []string
 	cursor          int
 	rowOffset       int
 	delays          map[string]uint16
+	delayCancel     context.CancelFunc
 	err             string
 	width           int
 	height          int
@@ -110,7 +112,6 @@ func New(paths config.Paths, runner *core.Runner, client *api.Client) Model {
 		linkInput:       ti,
 		linkActive:      -1,
 		subscriptionURL: subURL,
-		activeGroup:     api.DefaultProxyGroup,
 		nodes:           []string{},
 		delays:          map[string]uint16{},
 		hasSubscription: subURL != "",
@@ -139,7 +140,24 @@ func spinnerTick() tea.Cmd {
 
 const delayConcurrency = 8
 
-func startDelayTest(client *api.Client, nodes []string) tea.Cmd {
+func (m *Model) stopDelayTest() {
+	if m.delayCancel != nil {
+		m.delayCancel()
+		m.delayCancel = nil
+	}
+}
+
+func (m Model) beginDelayTest() (Model, tea.Cmd) {
+	m.stopDelayTest()
+	ctx, cancel := context.WithCancel(context.Background())
+	m.delayCancel = cancel
+	m.busy = true
+	m.err = ""
+	m.delays = map[string]uint16{}
+	return m, startDelayTest(ctx, m.api, m.nodes)
+}
+
+func startDelayTest(ctx context.Context, client *api.Client, nodes []string) tea.Cmd {
 	names := make([]string, 0, len(nodes))
 	for _, n := range nodes {
 		if n == "" || n == "DIRECT" || n == "REJECT" {
@@ -157,16 +175,27 @@ func startDelayTest(client *api.Client, nodes []string) tea.Cmd {
 		sem := make(chan struct{}, delayConcurrency)
 		var wg sync.WaitGroup
 		for _, name := range names {
+			if ctx.Err() != nil {
+				break
+			}
 			wg.Add(1)
 			go func(name string) {
 				defer wg.Done()
-				sem <- struct{}{}
+				select {
+				case <-ctx.Done():
+					return
+				case sem <- struct{}{}:
+				}
 				defer func() { <-sem }()
-				d, err := client.ProxyDelay(name)
+
+				d, err := client.ProxyDelay(ctx, name)
 				if err != nil {
 					d = 0
 				}
-				ch <- delayOneMsg{name: name, delay: d}
+				select {
+				case <-ctx.Done():
+				case ch <- delayOneMsg{name: name, delay: d}:
+				}
 			}(name)
 		}
 		wg.Wait()
@@ -200,10 +229,7 @@ func refresh(m Model, autoTest bool) tea.Cmd {
 			return refreshMsg{err: err}
 		}
 
-		group, ok := proxies.Proxies[m.activeGroup]
-		if !ok {
-			group, ok = proxies.Proxies[api.DefaultProxyGroup]
-		}
+		group, ok := proxies.Proxies[api.DefaultProxyGroup]
 		if !ok {
 			return refreshMsg{
 				mode:    config.NormalizeMode(cfg.Mode),
@@ -295,15 +321,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		var cmds []tea.Cmd
 		if msg.autoTest && len(m.nodes) > 0 {
-			m.busy = true
-			m.delays = map[string]uint16{}
-			cmds = append(cmds, startDelayTest(m.api, m.nodes))
+			var delayCmd tea.Cmd
+			m, delayCmd = m.beginDelayTest()
+			cmds = append(cmds, delayCmd)
 		}
-		if config.NormalizeMode(m.mode) == "global" {
-			cmds = append(cmds, func() tea.Msg {
-				_ = m.api.SyncGlobalFromProxy()
-				return nil
-			})
+		if cmd := syncGlobalCmd(m); cmd != nil {
+			cmds = append(cmds, cmd)
 		}
 		return m, tea.Batch(cmds...)
 
@@ -319,10 +342,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, waitDelayResult(msg.more)
 
 	case delayDoneMsg:
-		m.busy = false
+		// Ignore stale completions after disconnect / a newer load started.
+		if m.running && !m.loadingNodes && !m.starting {
+			m.busy = false
+		}
 		return m, nil
 
-	case linkMsg:
+	case actionMsg:
 		m.busy = false
 		m.loadingNodes = false
 		if msg.err != nil {
@@ -357,23 +383,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				m.clampLinkScroll()
 			}
-			m.syncSubscription()
-		}
-		if msg.refresh && m.running {
-			return m, refresh(m, msg.autoTest)
-		}
-		return m, nil
-
-	case actionMsg:
-		m.busy = false
-		m.loadingNodes = false
-		if msg.err != nil {
-			m.err = msg.err.Error()
 		} else {
-			m.err = ""
+			m.linkInput.SetValue("")
 		}
 		m.syncSubscription()
-		m.linkInput.SetValue("")
 		if msg.refresh && m.running {
 			return m, refresh(m, msg.autoTest)
 		}
@@ -389,13 +402,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.running, m.err = true, ""
 		m = m.beginNodesLoad()
-		return m, tea.Batch(m.fetchNodesCmd(), func() tea.Msg {
-			if config.NormalizeMode(config.LoadMode(m.paths.DataDir, "rule")) == "global" ||
-				config.NormalizeMode(m.mode) == "global" {
-				_ = m.api.SyncGlobalFromProxy()
-			}
-			return nil
-		})
+		return m, tea.Batch(m.fetchNodesCmd(), syncGlobalCmd(m))
 
 	case clearDataMsg:
 		return m.applyClearedData(msg), nil
@@ -415,9 +422,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func syncGlobalCmd(m Model) tea.Cmd {
+	if config.NormalizeMode(m.mode) != "global" &&
+		config.NormalizeMode(config.LoadMode(m.paths.DataDir, "rule")) != "global" {
+		return nil
+	}
+	return func() tea.Msg {
+		_ = m.api.SyncGlobalFromProxy()
+		return nil
+	}
+}
+
 func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+c", "q":
+		m.stopDelayTest()
 		_ = m.runner.Stop()
 		return m, tea.Quit
 	case "l":
@@ -429,6 +448,7 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		if m.running {
+			m.stopDelayTest()
 			err := m.runner.Stop()
 			m = m.resetIdleState()
 			if err != nil {
@@ -459,10 +479,7 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.err = "暂无节点"
 			return m, nil
 		}
-		m.busy = true
-		m.err = ""
-		m.delays = map[string]uint16{}
-		return m, startDelayTest(m.api, m.nodes)
+		return m.beginDelayTest()
 	case "m":
 		if !m.running {
 			m.err = "请先连接"
@@ -497,7 +514,7 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		node := m.nodes[m.cursor]
 		m = m.beginNodesLoad()
 		return m, func() tea.Msg {
-			if err := m.api.SelectProxy(m.activeGroup, node); err != nil {
+			if err := m.api.SelectProxy(api.DefaultProxyGroup, node); err != nil {
 				return actionMsg{err: err}
 			}
 			return actionMsg{refresh: true}
@@ -507,6 +524,7 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) beginNodesLoad() Model {
+	m.stopDelayTest()
 	m.busy = true
 	m.err = ""
 	m.loadingNodes = true
@@ -518,6 +536,7 @@ func (m Model) beginNodesLoad() Model {
 
 // resetIdleState restores the pre-connect UI, same as a fresh launch before Start.
 func (m Model) resetIdleState() Model {
+	m.stopDelayTest()
 	m.running = false
 	m.starting = false
 	m.loadingNodes = false
@@ -536,7 +555,7 @@ func (m Model) resetIdleState() Model {
 
 func (m Model) fetchNodesCmd() tea.Cmd {
 	return func() tea.Msg {
-		if err := fetchProviderNodes(m.api); err != nil {
+		if err := m.api.UpdateProvider(config.ProviderName); err != nil {
 			return actionMsg{err: err}
 		}
 		return actionMsg{refresh: true, autoTest: true}
@@ -555,6 +574,7 @@ func (m Model) beginConnect() (Model, tea.Cmd) {
 		m.err = core.TunBuildHint()
 		return m, nil
 	}
+	m.stopDelayTest()
 	m.starting, m.busy, m.err = true, true, ""
 	m.loadingNodes = false
 	m.nodes = nil

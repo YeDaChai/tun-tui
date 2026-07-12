@@ -5,10 +5,6 @@ geodata-mode: false
 geo-auto-update: false
 external-controller: 127.0.0.1:9090
 
-geox-url:
-  mmdb: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geoip.metadb
-  geosite: https://fastly.jsdelivr.net/gh/MetaCubeX/meta-rules-dat@release/geosite.dat
-
 tun:
   enable: true
   stack: gvisor

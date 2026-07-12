@@ -14,6 +14,9 @@ import (
 //go:embed default_config.yaml
 var defaultConfig []byte
 
+// APIControllerAddr is the local Mihomo external-controller bind address.
+const APIControllerAddr = "127.0.0.1:9090"
+
 type Paths struct {
 	DataDir    string
 	ConfigFile string
@@ -36,7 +39,7 @@ func ResolvePaths(dataDirFlag string) (Paths, error) {
 	return Paths{
 		DataDir:    dataDir,
 		ConfigFile: filepath.Join(dataDir, "config.yaml"),
-		APIBase:    "http://127.0.0.1:9090",
+		APIBase:    "http://" + APIControllerAddr,
 		APISecret:  secret,
 	}, nil
 }
