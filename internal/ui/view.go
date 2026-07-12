@@ -235,8 +235,8 @@ func (m Model) renderFooter() string {
 	w := m.contentWidth()
 	f := newFrame(w, false)
 	keys := [][2]string{
-		{"l", "链接"}, {"p", "设置"}, {"s", "连接"}, {"m", "模式"}, {"↑↓", "选择"},
-		{"u", "更新"}, {"t", "测速"}, {"q", "退出"},
+		{"S", "连接"}, {"JK", "选择"}, {"M", "模式"}, {"T", "测速"},
+		{"U", "更新"}, {"L", "链接"}, {"P", "设置"}, {"Q", "退出"},
 	}
 	items := make([]string, 0, len(keys))
 	total := 0
