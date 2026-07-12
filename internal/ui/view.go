@@ -27,16 +27,8 @@ var (
 	statusOnline      = lipgloss.NewStyle().Foreground(ok).Bold(true)
 	statusOffline     = lipgloss.NewStyle().Foreground(muted)
 	statusLoading     = lipgloss.NewStyle().Foreground(warn).Bold(true)
-	textErr           = lipgloss.NewStyle().Foreground(danger)
-	textSubtle        = lipgloss.NewStyle().Foreground(muted)
-	inputPanel        = lipgloss.NewStyle().
-				Border(lipgloss.NormalBorder()).
-				BorderForeground(accent).
-				BorderTop(true).
-				BorderBottom(true).
-				BorderLeft(false).
-				BorderRight(false).
-				Padding(1, 0)
+	textErr    = lipgloss.NewStyle().Foreground(danger)
+	textSubtle = lipgloss.NewStyle().Foreground(muted)
 	itemSelected = lipgloss.NewStyle().
 			Foreground(suggest).
 			Background(selBg).
@@ -160,37 +152,83 @@ func (m Model) renderProxyPanel() string {
 	b.WriteString(f.row(dividerStyle.Render(strings.Repeat("─", w))) + "\n")
 
 	for _, line := range strings.Split(m.renderNodeList(w), "\n") {
-		if line != "" {
-			b.WriteString(f.row(line) + "\n")
-		}
+		b.WriteString(f.row(line) + "\n")
 	}
 	b.WriteString(f.bottom())
 	return b.String()
 }
 
+var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+
 func (m Model) renderNodeList(innerW int) string {
-	vp := m.listViewport()
-	if len(m.nodes) == 0 {
-		return pad(textSubtle.Render("  "+m.emptyHint()), innerW)
+	budget := m.listBudget()
+	if budget < 1 {
+		budget = 1
 	}
-	var lines []string
+	if m.starting || m.loadingNodes || len(m.nodes) == 0 {
+		return strings.Join(m.emptyNodeLines(innerW, budget), "\n")
+	}
+	vp := m.listViewport()
+	lines := make([]string, 0, budget)
 	for i := m.rowOffset; i < vp.end; i++ {
 		lines = append(lines, pad(m.formatListItem(i, innerW), innerW))
+	}
+	for len(lines) < budget {
+		lines = append(lines, pad("", innerW))
 	}
 	return strings.Join(lines, "\n")
 }
 
-func (m Model) emptyHint() string {
+func (m Model) emptyNodeLines(width, height int) []string {
+	lines := make([]string, height)
+	for i := range lines {
+		lines[i] = pad("", width)
+	}
+	content := m.emptyPlaceholder()
+	if len(content) == 0 || height == 0 {
+		return lines
+	}
+	start := (height - len(content)) / 2
+	if start < 0 {
+		start = 0
+	}
+	for i, line := range content {
+		y := start + i
+		if y >= height {
+			break
+		}
+		lines[y] = centerText(line, width)
+	}
+	return lines
+}
+
+func (m Model) emptyPlaceholder() []string {
 	switch {
 	case m.starting:
-		return "正在建立连接…"
-	case m.running:
-		return "加载节点中…"
+		frame := spinnerFrames[m.spinner%len(spinnerFrames)]
+		return []string{textSubtle.Render(frame + " 正在连接…")}
+	case m.loadingNodes || (m.running && m.err == ""):
+		frame := spinnerFrames[m.spinner%len(spinnerFrames)]
+		return []string{textSubtle.Render(frame + " 加载节点中…")}
+	case m.running && m.err != "":
+		return []string{
+			textErr.Render("404"),
+			textSubtle.Render("代理加载失败"),
+		}
 	case m.hasSubscription:
-		return "等待连接…"
+		return []string{textSubtle.Render("等待连接…")}
 	default:
-		return "按 l 添加订阅链接"
+		return []string{textSubtle.Render("按 L 添加订阅链接")}
 	}
+}
+
+func centerText(s string, width int) string {
+	w := lipgloss.Width(s)
+	if w >= width {
+		return truncate(s, width)
+	}
+	left := (width - w) / 2
+	return pad(strings.Repeat(" ", left)+s, width)
 }
 
 func (m Model) formatListItem(idx, width int) string {
@@ -493,10 +531,14 @@ func (m Model) listBudget() int {
 }
 
 func (m Model) linkListBudget() int {
-	if m.height <= 0 {
-		return 6
+	// Keep the modal compact so it stays centered over the main screen.
+	b := 8
+	if m.height > 0 {
+		b = m.height/2 - 6
+		if b > 12 {
+			b = 12
+		}
 	}
-	b := m.height - 10
 	if b < 2 {
 		return 2
 	}

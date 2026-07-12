@@ -25,6 +25,7 @@ const (
 )
 
 type tickMsg struct{}
+type spinnerTickMsg struct{}
 type refreshMsg struct {
 	mode            string
 	traffic         api.Traffic
@@ -32,6 +33,7 @@ type refreshMsg struct {
 	provider        api.ProxyProvider
 	hasSubscription bool
 	nodeCrypto      string
+	autoTest        bool
 	err             error
 }
 type delayOneMsg struct {
@@ -41,8 +43,9 @@ type delayOneMsg struct {
 }
 type delayDoneMsg struct{}
 type actionMsg struct {
-	err     error
-	refresh bool
+	err      error
+	refresh  bool
+	autoTest bool
 }
 type startMsg struct{ err error }
 type autoConnectMsg struct{}
@@ -75,7 +78,9 @@ type Model struct {
 	width           int
 	height          int
 	busy            bool
+	loadingNodes    bool
 	nodeCrypto      string
+	spinner         int
 }
 
 func Run(ctx context.Context, paths config.Paths, runner *core.Runner, client *api.Client, binName string) error {
@@ -118,7 +123,7 @@ func New(paths config.Paths, runner *core.Runner, client *api.Client) Model {
 }
 
 func (m Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{tick(), textinput.Blink}
+	cmds := []tea.Cmd{tick(), spinnerTick(), textinput.Blink}
 	if m.hasSubscription {
 		cmds = append(cmds, func() tea.Msg { return autoConnectMsg{} })
 	}
@@ -127,6 +132,10 @@ func (m Model) Init() tea.Cmd {
 
 func tick() tea.Cmd {
 	return tea.Tick(2*time.Second, func(time.Time) tea.Msg { return tickMsg{} })
+}
+
+func spinnerTick() tea.Cmd {
+	return tea.Tick(80*time.Millisecond, func(time.Time) tea.Msg { return spinnerTickMsg{} })
 }
 
 const delayConcurrency = 8
@@ -177,7 +186,7 @@ func waitDelayResult(ch <-chan delayOneMsg) tea.Cmd {
 	}
 }
 
-func refresh(m Model) tea.Cmd {
+func refresh(m Model, autoTest bool) tea.Cmd {
 	return func() tea.Msg {
 		if !m.running {
 			return refreshMsg{err: fmt.Errorf("内核未运行")}
@@ -210,6 +219,7 @@ func refresh(m Model) tea.Cmd {
 			traffic:         traffic,
 			group:           group,
 			hasSubscription: subURL != "",
+			autoTest:        autoTest,
 		}
 		if group.Now != "" {
 			apiType := ""
@@ -271,9 +281,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		cmds := []tea.Cmd{tick()}
 		if m.running && m.screen == screenMain && !m.busy {
-			cmds = append(cmds, refresh(m))
+			cmds = append(cmds, refresh(m, false))
 		}
 		return m, tea.Batch(cmds...)
+
+	case spinnerTickMsg:
+		m.spinner++
+		return m, spinnerTick()
 
 	case refreshMsg:
 		if msg.err != nil {
@@ -291,13 +305,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.nodeCrypto = msg.nodeCrypto
 		m.nodes = msg.group.All
 		m.clampListScroll()
+
+		var cmds []tea.Cmd
+		if msg.autoTest && len(m.nodes) > 0 {
+			m.busy = true
+			m.delays = map[string]uint16{}
+			cmds = append(cmds, startDelayTest(m.api, m.nodes))
+		}
 		if config.NormalizeMode(m.mode) == "global" {
-			return m, func() tea.Msg {
+			cmds = append(cmds, func() tea.Msg {
 				_ = m.api.SyncGlobalFromProxy()
 				return nil
-			}
+			})
 		}
-		return m, nil
+		return m, tea.Batch(cmds...)
 
 	case delayOneMsg:
 		if m.delays == nil {
@@ -313,10 +334,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case linkMsg:
 		m.busy = false
+		m.loadingNodes = false
 		if msg.err != nil {
 			m.err = msg.err.Error()
 		} else {
 			m.err = ""
+		}
+		if msg.err != nil && !msg.added && !msg.deleted && m.screen == screenLinkList {
+			m.linkInputFocus = true
+			m.linkInput.Focus()
+			return m, textinput.Blink
 		}
 		if msg.added || msg.deleted {
 			urls, active, err := config.LoadSubscriptionLinks(m.paths.DataDir)
@@ -343,12 +370,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.syncSubscription()
 		}
 		if msg.refresh {
-			return m, refresh(m)
+			return m, refresh(m, msg.autoTest)
 		}
 		return m, nil
 
 	case actionMsg:
 		m.busy = false
+		m.loadingNodes = false
 		if msg.err != nil {
 			m.err = msg.err.Error()
 		} else {
@@ -357,23 +385,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.syncSubscription()
 		m.linkInput.SetValue("")
 		if msg.refresh {
-			return m, refresh(m)
+			return m, refresh(m, msg.autoTest)
 		}
 		return m, nil
 
 	case startMsg:
 		m.starting = false
-		m.busy = false
-		m.running = m.runner.Running()
 		if msg.err != nil {
+			m.busy = false
+			m.loadingNodes = false
 			m.err = msg.err.Error()
 			return m, nil
 		}
 		m.running, m.err = true, ""
-		if url, err := config.LoadSubscriptionURL(m.paths.DataDir); err == nil && config.HasProviderCache(m.paths.DataDir) {
-			_ = config.MarkProviderCache(m.paths.DataDir, url)
-		}
-		return m, tea.Batch(refresh(m), func() tea.Msg {
+		m = m.beginNodesLoad()
+		return m, tea.Batch(m.fetchNodesCmd(), func() tea.Msg {
 			if config.NormalizeMode(config.LoadMode(m.paths.DataDir, "rule")) == "global" ||
 				config.NormalizeMode(m.mode) == "global" {
 				_ = m.api.SyncGlobalFromProxy()
@@ -412,6 +438,8 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.running {
 			err := m.runner.Stop()
 			m.running = false
+			m.loadingNodes = false
+			m.busy = false
 			m.nodes = nil
 			m.nodeCrypto = ""
 			m.provider = api.ProxyProvider{}
@@ -430,23 +458,17 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.err = "请先连接"
 			return m, nil
 		}
-		if m.busy {
+		if m.busy || m.loadingNodes {
 			return m, nil
 		}
-		m.busy = true
-		return m, func() tea.Msg {
-			if err := m.api.UpdateProvider(config.ProviderName); err != nil {
-				return actionMsg{err: err}
-			}
-			markProviderCache(m.paths.DataDir)
-			return actionMsg{refresh: true}
-		}
+		m = m.beginNodesLoad()
+		return m, m.fetchNodesCmd()
 	case "t":
 		if !m.running {
 			m.err = "请先连接"
 			return m, nil
 		}
-		if m.busy {
+		if m.busy || m.loadingNodes {
 			return m, nil
 		}
 		if len(m.nodes) == 0 {
@@ -462,7 +484,7 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.err = "请先连接"
 			return m, nil
 		}
-		if m.busy {
+		if m.busy || m.loadingNodes {
 			return m, nil
 		}
 		m.busy = true
@@ -485,11 +507,11 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.moveCursor(1)
 		return m, nil
 	case "enter":
-		if !m.running || len(m.nodes) == 0 || m.busy {
+		if !m.running || len(m.nodes) == 0 || m.busy || m.loadingNodes {
 			return m, nil
 		}
-		m.busy = true
 		node := m.nodes[m.cursor]
+		m = m.beginNodesLoad()
 		return m, func() tea.Msg {
 			if err := m.api.SelectProxy(m.activeGroup, node); err != nil {
 				return actionMsg{err: err}
@@ -498,6 +520,26 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+func (m Model) beginNodesLoad() Model {
+	m.busy = true
+	m.err = ""
+	m.loadingNodes = true
+	m.nodes = nil
+	m.delays = map[string]uint16{}
+	m.cursor, m.rowOffset = 0, 0
+	m.nodeCrypto = ""
+	return m
+}
+
+func (m Model) fetchNodesCmd() tea.Cmd {
+	return func() tea.Msg {
+		if err := fetchProviderNodes(m.api); err != nil {
+			return actionMsg{err: err}
+		}
+		return actionMsg{refresh: true, autoTest: true}
+	}
 }
 
 func (m Model) beginConnect() (Model, tea.Cmd) {
@@ -513,6 +555,10 @@ func (m Model) beginConnect() (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.starting, m.busy, m.err = true, true, ""
+	m.loadingNodes = false
+	m.nodes = nil
+	m.delays = map[string]uint16{}
+	m.cursor, m.rowOffset = 0, 0
 	return m, func() tea.Msg {
 		if err := m.runner.Start(); err != nil {
 			return startMsg{err: err}

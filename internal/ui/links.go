@@ -5,23 +5,22 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
+	"tun-tui/internal/api"
 	"tun-tui/internal/config"
 )
 
 type linkMsg struct {
-	added   bool
-	deleted bool
-	err     error
-	refresh bool
+	added    bool
+	deleted  bool
+	err      error
+	refresh  bool
+	autoTest bool
 }
 
-func markProviderCache(dataDir string) {
-	url, err := config.LoadSubscriptionURL(dataDir)
-	if err != nil || url == "" || !config.HasProviderCache(dataDir) {
-		return
-	}
-	_ = config.MarkProviderCache(dataDir, url)
+func fetchProviderNodes(client *api.Client) error {
+	return client.UpdateProvider(config.ProviderName)
 }
 
 func (m Model) openLinkScreen() Model {
@@ -70,6 +69,7 @@ func (m Model) updateLinkList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "i", "a":
 		m.linkInputFocus = true
 		m.linkInput.Focus()
+		m.err = ""
 		return m, textinput.Blink
 	case "k", "up":
 		m.moveLinkCursor(-1)
@@ -81,7 +81,11 @@ func (m Model) updateLinkList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(m.linkURLs) == 0 || m.busy {
 			return m, nil
 		}
-		m.busy = true
+		if m.running && m.linkCursor == m.linkActive {
+			m = m.beginNodesLoad()
+		} else {
+			m.busy = true
+		}
 		return m, m.deleteLink(m.linkCursor)
 	case "enter":
 		if len(m.linkURLs) == 0 {
@@ -92,7 +96,11 @@ func (m Model) updateLinkList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.busy {
 			return m, nil
 		}
-		m.busy = true
+		if m.running {
+			m = m.beginNodesLoad()
+		} else {
+			m.busy = true
+		}
 		return m.closeLinkScreen(), m.selectLink(m.linkCursor)
 	case "ctrl+c":
 		_ = m.runner.Stop()
@@ -110,6 +118,7 @@ func (m Model) updateLinkInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.linkInputFocus = false
 		m.linkInput.Blur()
 		m.linkInput.SetValue("")
+		m.err = ""
 		return m, nil
 	case "enter":
 		url := strings.TrimSpace(m.linkInput.Value())
@@ -119,7 +128,11 @@ func (m Model) updateLinkInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.linkInput.SetValue("")
 		m.linkInputFocus = false
 		m.linkInput.Blur()
-		m.busy = true
+		if m.running {
+			m = m.beginNodesLoad()
+		} else {
+			m.busy = true
+		}
 		return m, m.addLink(url)
 	case "ctrl+c":
 		_ = m.runner.Stop()
@@ -141,8 +154,10 @@ func (m Model) selectLink(index int) tea.Cmd {
 		if err := reloadAndSyncMode(m.runner, m.api, m.paths.DataDir); err != nil {
 			return actionMsg{err: err}
 		}
-		markProviderCache(m.paths.DataDir)
-		return actionMsg{refresh: true}
+		if err := fetchProviderNodes(m.api); err != nil {
+			return actionMsg{err: err}
+		}
+		return actionMsg{refresh: true, autoTest: true}
 	}
 }
 
@@ -157,8 +172,10 @@ func (m Model) addLink(url string) tea.Cmd {
 		if err := reloadAndSyncMode(m.runner, m.api, m.paths.DataDir); err != nil {
 			return linkMsg{added: true, err: err}
 		}
-		markProviderCache(m.paths.DataDir)
-		return linkMsg{added: true, refresh: true}
+		if err := fetchProviderNodes(m.api); err != nil {
+			return linkMsg{added: true, err: err}
+		}
+		return linkMsg{added: true, refresh: true, autoTest: true}
 	}
 }
 
@@ -178,23 +195,59 @@ func (m Model) deleteLink(index int) tea.Cmd {
 		if err := reloadAndSyncMode(m.runner, m.api, m.paths.DataDir); err != nil {
 			return linkMsg{deleted: true, err: err}
 		}
-		return linkMsg{deleted: true, refresh: true}
+		if err := fetchProviderNodes(m.api); err != nil {
+			return linkMsg{deleted: true, err: err}
+		}
+		return linkMsg{deleted: true, refresh: true, autoTest: true}
 	}
 }
 
 func (m Model) viewLinkScreen() string {
-	w := m.contentWidth()
-	if w < 40 {
-		w = 40
+	w := m.width
+	if w <= 0 {
+		w = m.contentWidth()
 	}
-	f := newFrame(w, true)
-	var b strings.Builder
-	b.WriteString(f.top() + "\n")
-	b.WriteString(f.row(sectionTitle.Render(" 订阅链接 ")) + "\n")
-	b.WriteString(f.row(dividerStyle.Render(strings.Repeat("─", w))) + "\n")
+	h := m.height
+	if h <= 0 {
+		h = 24
+	}
+	bg := m.viewMain()
+	if m.linkInputFocus {
+		return overlayCenter(bg, m.renderAddLinkBox(), w, h)
+	}
+	return overlayCenter(bg, m.renderLinkListBox(), w, h)
+}
+
+func (m Model) linkModalWidth() int {
+	w := m.contentWidth() - 8
+	if w > 64 {
+		w = 64
+	}
+	if w < 36 {
+		w = m.contentWidth()
+		if w > 36 {
+			w = 36
+		}
+	}
+	if w < 24 {
+		w = 24
+	}
+	return w
+}
+
+func (m Model) renderLinkListBox() string {
+	modalW := m.linkModalWidth()
+	innerW := modalW - 4
+	if innerW < 20 {
+		innerW = 20
+	}
+
+	var body strings.Builder
+	body.WriteString(sectionTitle.Render("订阅链接") + "\n")
+	body.WriteString(dividerStyle.Render(strings.Repeat("─", innerW)) + "\n")
 
 	if len(m.linkURLs) == 0 {
-		b.WriteString(f.row(textSubtle.Render("  暂无链接 — 按 i 添加")) + "\n")
+		body.WriteString(textSubtle.Render("暂无链接 — 按 I 添加") + "\n")
 	} else {
 		vp := m.linkViewport()
 		for i := m.linkRowOffset; i < vp.end; i++ {
@@ -208,27 +261,59 @@ func (m Model) viewLinkScreen() string {
 			if i == m.linkCursor {
 				style, full = itemSelected, true
 			}
-			item := buildRow(w, mark, maskURL(m.linkURLs[i]), "", style, itemNormal, full)
-			b.WriteString(f.row(pad(item, w)) + "\n")
+			item := buildRow(innerW, mark, maskURL(m.linkURLs[i]), "", style, itemNormal, full)
+			body.WriteString(item + "\n")
 		}
 	}
 
-	b.WriteString(f.bottom() + "\n\n")
-	if m.linkInputFocus {
-		b.WriteString(textSubtle.Render("  添加订阅链接:") + "\n")
-	} else {
-		b.WriteString(textSubtle.Render("  按 i 添加，按 d 删除选中") + "\n")
-	}
-	b.WriteString(inputPanel.Render(m.linkInput.View()) + "\n\n")
+	body.WriteString(dividerStyle.Render(strings.Repeat("─", innerW)) + "\n")
 	if m.err != "" {
-		b.WriteString(textErr.Render("! "+m.err) + "\n\n")
+		body.WriteString(textErr.Render("! "+truncate(m.err, innerW-2)) + "\n")
 	}
-	b.WriteString(footerKey.Render("↵") + footerLabel.Render(" 使用"))
-	b.WriteString(footerSep.Render("  "))
-	b.WriteString(footerKey.Render("i") + footerLabel.Render(" 添加"))
-	b.WriteString(footerSep.Render("  "))
-	b.WriteString(footerKey.Render("d") + footerLabel.Render(" 删除"))
-	b.WriteString(footerSep.Render("  "))
-	b.WriteString(footerKey.Render("esc") + footerLabel.Render(" 关闭") + "\n")
-	return b.String()
+	body.WriteString(footerKey.Render("↵") + footerLabel.Render(" 使用"))
+	body.WriteString(footerSep.Render("  "))
+	body.WriteString(footerKey.Render("I") + footerLabel.Render(" 添加"))
+	body.WriteString(footerSep.Render("  "))
+	body.WriteString(footerKey.Render("D") + footerLabel.Render(" 删除"))
+	body.WriteString(footerSep.Render("  "))
+	body.WriteString(footerKey.Render("ESC") + footerLabel.Render(" 关闭"))
+
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(accent).
+		Padding(1, 2).
+		Width(modalW).
+		Render(strings.TrimRight(body.String(), "\n"))
+}
+
+func (m Model) renderAddLinkBox() string {
+	modalW := m.linkModalWidth()
+	innerW := modalW - 4
+	if innerW < 20 {
+		innerW = 20
+	}
+
+	ti := m.linkInput
+	ti.Width = innerW - lipgloss.Width(ti.Prompt)
+	if ti.Width < 12 {
+		ti.Width = 12
+	}
+
+	var body strings.Builder
+	body.WriteString(sectionTitle.Render("添加订阅链接") + "\n\n")
+	body.WriteString(ti.View() + "\n")
+	if m.err != "" {
+		body.WriteString("\n" + textErr.Render("! "+truncate(m.err, innerW-2)) + "\n")
+	}
+	body.WriteString("\n")
+	body.WriteString(footerKey.Render("↵") + footerLabel.Render(" 确认"))
+	body.WriteString(footerSep.Render("  "))
+	body.WriteString(footerKey.Render("ESC") + footerLabel.Render(" 取消"))
+
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(accent).
+		Padding(1, 2).
+		Width(modalW).
+		Render(strings.TrimRight(body.String(), "\n"))
 }

@@ -4,8 +4,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-
-	"tun-tui/internal/config"
 )
 
 const projectURL = "https://github.com/YeDaChai/tun-tui"
@@ -52,14 +50,6 @@ func (m Model) viewSettingsScreen() string {
 	b.WriteString(f.row(textSubtle.Render("  macOS    ")+modeActive.Render("~/Library/Application Support/tun-tui")) + "\n")
 	b.WriteString(f.row(textSubtle.Render("  Windows  ")+modeActive.Render(`%APPDATA%\tun-tui`)) + "\n")
 	b.WriteString(f.row(textSubtle.Render("  Linux    ")+modeActive.Render("~/.local/share/tun-tui")) + "\n")
-	b.WriteString(f.row("") + "\n")
-
-	b.WriteString(f.row(textSubtle.Render(" 节点缓存")) + "\n")
-	if config.HasProviderCache(m.paths.DataDir) {
-		b.WriteString(f.row(modeActive.Render("  "+config.ProviderCachePath(m.paths.DataDir))) + "\n")
-	} else {
-		b.WriteString(f.row(textSubtle.Render("  （尚未缓存，连接后按 u 更新订阅）")) + "\n")
-	}
 	b.WriteString(f.row("") + "\n")
 
 	b.WriteString(f.row(textSubtle.Render(" Git")) + "\n")

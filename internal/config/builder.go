@@ -27,7 +27,7 @@ func BuildConfigBytes(dataDir, cfgPath, apiSecret string) ([]byte, error) {
 		if err := ValidateSubscriptionURL(subURL); err != nil {
 			return nil, fmt.Errorf("订阅地址不安全: %w", err)
 		}
-		if err := SyncProviderCache(dataDir, subURL); err != nil {
+		if err := ClearProviderCache(dataDir); err != nil {
 			return nil, err
 		}
 		if err := applySubscriptionURL(root, subURL); err != nil {
@@ -61,7 +61,7 @@ func applySubscriptionURL(root map[string]any, subURL string) error {
 	provider["type"] = "http"
 	provider["path"] = "./providers/subscription.yaml"
 	provider["url"] = subURL
-	// 0 = load local cache on start; only refresh when the user presses u.
+	// Always fetch on connect/update via API; do not reuse a local node list.
 	provider["interval"] = 0
 	providers[ProviderName] = provider
 	root["proxy-providers"] = providers
