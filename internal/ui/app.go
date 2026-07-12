@@ -81,6 +81,7 @@ type Model struct {
 	loadingNodes    bool
 	nodeCrypto      string
 	spinner         int
+	settingsNote    string
 }
 
 func Run(ctx context.Context, paths config.Paths, runner *core.Runner, client *api.Client, binName string) error {
@@ -406,6 +407,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return nil
 		})
+
+	case clearDataMsg:
+		return m.applyClearedData(msg), nil
 
 	case autoConnectMsg:
 		return m.beginConnect()

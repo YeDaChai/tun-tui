@@ -29,6 +29,10 @@ func New(base, secret string) *Client {
 	}
 }
 
+func (c *Client) SetSecret(secret string) {
+	c.secret = secret
+}
+
 func (c *Client) request(method, path string, body any) ([]byte, error) {
 	var reader io.Reader
 	if body != nil {

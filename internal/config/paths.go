@@ -115,3 +115,24 @@ func bootstrap(dataDir string) error {
 	_ = chownToSudoUser(filepath.Join(dataDir, "geosite.dat"))
 	return nil
 }
+
+// ClearAppData removes all files under the data directory and re-bootstraps defaults.
+// Used when old local data is incompatible with a newer version.
+func ClearAppData(dataDir string) (string, error) {
+	if dataDir == "" {
+		return "", fmt.Errorf("数据目录为空")
+	}
+	entries, err := os.ReadDir(dataDir)
+	if err != nil && !os.IsNotExist(err) {
+		return "", fmt.Errorf("读取数据目录失败: %w", err)
+	}
+	for _, entry := range entries {
+		if err := os.RemoveAll(filepath.Join(dataDir, entry.Name())); err != nil {
+			return "", fmt.Errorf("清理 %s 失败: %w", entry.Name(), err)
+		}
+	}
+	if err := bootstrap(dataDir); err != nil {
+		return "", err
+	}
+	return LoadOrCreateAPISecret(dataDir)
+}

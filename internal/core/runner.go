@@ -39,6 +39,12 @@ func NewRunner(dataDir, cfgPath, secret string) *Runner {
 	return &Runner{dataDir: dataDir, cfgPath: cfgPath, secret: secret}
 }
 
+func (r *Runner) SetSecret(secret string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.secret = secret
+}
+
 func (r *Runner) Running() bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
