@@ -34,10 +34,10 @@ func (m Model) updateSettingsScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "esc", "p":
 		return m.closeSettingsScreen(), nil
 	case "d":
-		if m.busy || m.starting || m.loadingNodes {
+		if m.work.busy() {
 			return m, nil
 		}
-		m.busy = true
+		m.work = workActing
 		m.settingsNote = ""
 		m.err = ""
 		return m, m.clearDataCmd()
@@ -60,7 +60,7 @@ func (m Model) clearDataCmd() tea.Cmd {
 }
 
 func (m Model) applyClearedData(msg clearDataMsg) Model {
-	m.busy = false
+	m.work = workIdle
 	if msg.err != nil {
 		m.err = msg.err.Error()
 		m.settingsNote = ""

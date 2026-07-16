@@ -115,7 +115,7 @@ func (m Model) connectionLine() string {
 	switch {
 	case m.running:
 		return statusOnline.Render("● 已连接")
-	case m.starting:
+	case m.work == workConnecting:
 		return statusLoading.Render("… 连接中")
 	default:
 		return statusOffline.Render("○ 未连接")
@@ -181,7 +181,7 @@ func (m Model) renderNodeList(innerW int) string {
 	if budget < 1 {
 		budget = 1
 	}
-	if m.starting || m.loadingNodes || len(m.nodes) == 0 {
+	if m.work.spinning() || len(m.nodes) == 0 {
 		return strings.Join(m.emptyNodeLines(innerW, budget), "\n")
 	}
 	vp := m.listViewport()
@@ -220,12 +220,14 @@ func (m Model) emptyNodeLines(width, height int) []string {
 
 func (m Model) emptyPlaceholder() []string {
 	switch {
-	case m.starting:
+	case m.work == workConnecting:
 		frame := spinnerFrames[m.spinner%len(spinnerFrames)]
 		return []string{textSubtle.Render(frame + " 正在连接…")}
-	case m.loadingNodes || (m.running && m.err == ""):
+	case m.work == workLoadingNodes:
 		frame := spinnerFrames[m.spinner%len(spinnerFrames)]
 		return []string{textSubtle.Render(frame + " 加载节点中…")}
+	case m.running && m.err == "":
+		return []string{textSubtle.Render("加载节点中…")}
 	case m.running && m.err != "":
 		return []string{
 			textErr.Render("404"),
@@ -331,7 +333,7 @@ func distributeItems(items []string, total, width int) string {
 			b.WriteString(strings.Repeat(" ", g))
 		}
 	}
-	return b.String()
+	return pad(b.String(), width)
 }
 
 // --- layout helpers ---
@@ -375,11 +377,19 @@ func truncate(s string, max int) string {
 }
 
 func pad(s string, width int) string {
-	w := lipgloss.Width(s)
-	if w >= width {
-		return s
+	if width <= 0 {
+		return ""
 	}
-	return s + strings.Repeat(" ", width-w)
+	w := lipgloss.Width(s)
+	switch {
+	case w == width:
+		return s
+	case w > width:
+		// Flag emoji / CJK can under-measure; clip so resize ghosts don't accumulate.
+		return ansi.Truncate(s, width, "")
+	default:
+		return s + strings.Repeat(" ", width-w)
+	}
 }
 
 func lineCount(s string) int {

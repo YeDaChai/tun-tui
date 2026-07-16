@@ -64,7 +64,7 @@ type Model struct {
 	linkInputFocus  bool
 	subscriptionURL string
 	running         bool
-	starting        bool
+	work            workState
 	mode            string
 	traffic         api.Traffic
 	group           api.Proxy
@@ -78,8 +78,6 @@ type Model struct {
 	err             string
 	width           int
 	height          int
-	busy            bool
-	loadingNodes    bool
 	spinner         int
 	settingsNote    string
 }
@@ -123,7 +121,7 @@ func New(paths config.Paths, runner *core.Runner, client *api.Client) Model {
 }
 
 func (m Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{tick(), spinnerTick(), textinput.Blink}
+	cmds := []tea.Cmd{tick(), textinput.Blink}
 	if m.hasSubscription {
 		cmds = append(cmds, func() tea.Msg { return autoConnectMsg{} })
 	}
@@ -151,7 +149,7 @@ func (m Model) beginDelayTest() (Model, tea.Cmd) {
 	m.stopDelayTest()
 	ctx, cancel := context.WithCancel(context.Background())
 	m.delayCancel = cancel
-	m.busy = true
+	m.work = workTesting
 	m.err = ""
 	m.delays = map[string]uint16{}
 	return m, startDelayTest(ctx, m.api, m.nodes)
@@ -288,16 +286,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.linkInput.Width = w
 		m.clampListScroll()
 		m.clampLinkScroll()
-		return m, nil
+		// Differential redraw leaves ghost cells when the terminal shrinks.
+		return m, tea.ClearScreen
 
 	case tickMsg:
 		cmds := []tea.Cmd{tick()}
-		if m.running && m.screen == screenMain && !m.busy {
+		if m.running && m.screen == screenMain && !m.work.busy() {
 			cmds = append(cmds, refresh(m, false))
 		}
 		return m, tea.Batch(cmds...)
 
 	case spinnerTickMsg:
+		if !m.work.spinning() {
+			return m, nil
+		}
 		m.spinner++
 		return m, spinnerTick()
 
@@ -343,14 +345,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case delayDoneMsg:
 		// Ignore stale completions after disconnect / a newer load started.
-		if m.running && !m.loadingNodes && !m.starting {
-			m.busy = false
+		if m.running && m.work == workTesting {
+			m.work = workIdle
 		}
 		return m, nil
 
 	case actionMsg:
-		m.busy = false
-		m.loadingNodes = false
+		m.work = workIdle
 		if msg.err != nil {
 			m.err = msg.err.Error()
 		} else {
@@ -393,16 +394,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case startMsg:
-		m.starting = false
 		if msg.err != nil {
-			m.busy = false
-			m.loadingNodes = false
+			m.work = workIdle
 			m.err = msg.err.Error()
 			return m, nil
 		}
 		m.running, m.err = true, ""
 		m = m.beginNodesLoad()
-		return m, tea.Batch(m.fetchNodesCmd(), syncGlobalCmd(m))
+		return m, tea.Batch(m.fetchNodesCmd(), syncGlobalCmd(m), spinnerTick())
 
 	case clearDataMsg:
 		return m.applyClearedData(msg), nil
@@ -444,7 +443,7 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "p":
 		return m.openSettingsScreen(), nil
 	case "s":
-		if m.starting || m.busy {
+		if m.work.busy() {
 			return m, nil
 		}
 		if m.running {
@@ -462,17 +461,17 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.err = "请先连接"
 			return m, nil
 		}
-		if m.busy || m.loadingNodes {
+		if m.work.busy() {
 			return m, nil
 		}
 		m = m.beginNodesLoad()
-		return m, m.fetchNodesCmd()
+		return m, tea.Batch(m.fetchNodesCmd(), spinnerTick())
 	case "t":
 		if !m.running {
 			m.err = "请先连接"
 			return m, nil
 		}
-		if m.busy || m.loadingNodes {
+		if m.work.busy() {
 			return m, nil
 		}
 		if len(m.nodes) == 0 {
@@ -485,10 +484,10 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.err = "请先连接"
 			return m, nil
 		}
-		if m.busy || m.loadingNodes {
+		if m.work.busy() {
 			return m, nil
 		}
-		m.busy = true
+		m.work = workActing
 		next := nextMode(m.mode)
 		m.mode = next
 		dataDir := m.paths.DataDir
@@ -508,11 +507,11 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.moveCursor(1)
 		return m, nil
 	case "enter":
-		if !m.running || len(m.nodes) == 0 || m.busy || m.loadingNodes {
+		if !m.running || len(m.nodes) == 0 || m.work.busy() {
 			return m, nil
 		}
 		node := m.nodes[m.cursor]
-		m.busy = true
+		m.work = workActing
 		return m, func() tea.Msg {
 			if err := m.api.SelectProxy(api.DefaultProxyGroup, node); err != nil {
 				return actionMsg{err: err}
@@ -525,9 +524,8 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) beginNodesLoad() Model {
 	m.stopDelayTest()
-	m.busy = true
+	m.work = workLoadingNodes
 	m.err = ""
-	m.loadingNodes = true
 	m.nodes = nil
 	m.delays = map[string]uint16{}
 	m.cursor, m.rowOffset = 0, 0
@@ -538,9 +536,7 @@ func (m Model) beginNodesLoad() Model {
 func (m Model) resetIdleState() Model {
 	m.stopDelayTest()
 	m.running = false
-	m.starting = false
-	m.loadingNodes = false
-	m.busy = false
+	m.work = workIdle
 	m.nodes = nil
 	m.delays = map[string]uint16{}
 	m.cursor, m.rowOffset = 0, 0
@@ -563,7 +559,7 @@ func (m Model) fetchNodesCmd() tea.Cmd {
 }
 
 func (m Model) beginConnect() (Model, tea.Cmd) {
-	if m.starting || m.running || m.busy {
+	if m.work.busy() || m.running {
 		return m, nil
 	}
 	if m.subscriptionURL == "" {
@@ -575,15 +571,15 @@ func (m Model) beginConnect() (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.stopDelayTest()
-	m.starting, m.busy, m.err = true, true, ""
-	m.loadingNodes = false
+	m.work = workConnecting
+	m.err = ""
 	m.nodes = nil
 	m.delays = map[string]uint16{}
 	m.cursor, m.rowOffset = 0, 0
-	return m, func() tea.Msg {
+	return m, tea.Batch(spinnerTick(), func() tea.Msg {
 		if err := m.runner.Start(); err != nil {
 			return startMsg{err: err}
 		}
 		return startMsg{}
-	}
+	})
 }

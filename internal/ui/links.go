@@ -65,30 +65,34 @@ func (m Model) updateLinkList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.moveLinkCursor(1)
 		return m, nil
 	case "d":
-		if len(m.linkURLs) == 0 || m.busy {
+		if len(m.linkURLs) == 0 || m.work.busy() {
 			return m, nil
 		}
+		cmds := []tea.Cmd{m.deleteLink(m.linkCursor)}
 		if m.running && m.linkCursor == m.linkActive {
 			m = m.beginNodesLoad()
+			cmds = append(cmds, spinnerTick())
 		} else {
-			m.busy = true
+			m.work = workActing
 		}
-		return m, m.deleteLink(m.linkCursor)
+		return m, tea.Batch(cmds...)
 	case "enter":
 		if len(m.linkURLs) == 0 {
 			m.linkInputFocus = true
 			m.linkInput.Focus()
 			return m, textinput.Blink
 		}
-		if m.busy {
+		if m.work.busy() {
 			return m, nil
 		}
+		cmds := []tea.Cmd{m.selectLink(m.linkCursor)}
 		if m.running {
 			m = m.beginNodesLoad()
+			cmds = append(cmds, spinnerTick())
 		} else {
-			m.busy = true
+			m.work = workActing
 		}
-		return m.closeLinkScreen(), m.selectLink(m.linkCursor)
+		return m.closeLinkScreen(), tea.Batch(cmds...)
 	case "ctrl+c":
 		m.stopDelayTest()
 		_ = m.runner.Stop()
@@ -110,18 +114,20 @@ func (m Model) updateLinkInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case "enter":
 		url := strings.TrimSpace(m.linkInput.Value())
-		if url == "" || m.busy {
+		if url == "" || m.work.busy() {
 			return m, nil
 		}
 		m.linkInput.SetValue("")
 		m.linkInputFocus = false
 		m.linkInput.Blur()
+		cmds := []tea.Cmd{m.addLink(url)}
 		if m.running {
 			m = m.beginNodesLoad()
+			cmds = append(cmds, spinnerTick())
 		} else {
-			m.busy = true
+			m.work = workActing
 		}
-		return m, m.addLink(url)
+		return m, tea.Batch(cmds...)
 	case "ctrl+c":
 		m.stopDelayTest()
 		_ = m.runner.Stop()

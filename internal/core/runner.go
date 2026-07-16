@@ -1,9 +1,9 @@
 package core
 
 import (
+	"context"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -26,13 +26,14 @@ import (
 )
 
 type Runner struct {
-	mu       sync.Mutex
-	running  bool
-	dataDir  string
-	cfgPath  string
-	secret   string
-	logFile  *os.File
-	logReady bool
+	mu         sync.Mutex
+	running    bool
+	dataDir    string
+	cfgPath    string
+	secret     string
+	logFile    *os.File
+	logReady   bool
+	readyCheck ReadyFunc // nil → DefaultReadyCheck
 }
 
 func NewRunner(dataDir, cfgPath, secret string) *Runner {
@@ -43,6 +44,13 @@ func (r *Runner) SetSecret(secret string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.secret = secret
+}
+
+// SetReadyCheck injects a custom readiness probe (tests). Pass nil to restore default.
+func (r *Runner) SetReadyCheck(fn ReadyFunc) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.readyCheck = fn
 }
 
 func (r *Runner) Start() error {
@@ -72,7 +80,7 @@ func (r *Runner) Start() error {
 		return fmt.Errorf("parse config: %w", err)
 	}
 	syncTunnelMode(r.dataDir)
-	if err := verifyTunStarted(r.dataDir, logPos); err != nil {
+	if err := r.verifyReady(logPos); err != nil {
 		executor.Shutdown()
 		return err
 	}
@@ -188,30 +196,20 @@ func logOffset(dataDir string) int64 {
 	return info.Size()
 }
 
-func verifyTunStarted(dataDir string, offset int64) error {
+func (r *Runner) verifyReady(logPos int64) error {
 	if !TunBuildReady() {
 		return fmt.Errorf("%s", TunBuildHint())
 	}
-	time.Sleep(300 * time.Millisecond)
-
-	if err := scanTunStartErrors(dataDir, offset); err != nil {
-		return err
+	check := r.readyCheck
+	if check == nil {
+		dataDir := r.dataDir
+		check = DefaultReadyCheck(config.APIControllerAddr, r.secret, func() error {
+			return scanTunStartErrors(dataDir, logPos)
+		})
 	}
-
-	// Positive check: external controller must accept connections.
-	deadline := time.Now().Add(2 * time.Second)
-	for time.Now().Before(deadline) {
-		conn, err := net.DialTimeout("tcp", config.APIControllerAddr, 200*time.Millisecond)
-		if err == nil {
-			_ = conn.Close()
-			return nil
-		}
-		if err := scanTunStartErrors(dataDir, offset); err != nil {
-			return err
-		}
-		time.Sleep(100 * time.Millisecond)
-	}
-	return fmt.Errorf("内核未响应控制端口 %s，启动可能失败；详见 mihomo.log", config.APIControllerAddr)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	return check(ctx)
 }
 
 func scanTunStartErrors(dataDir string, offset int64) error {
