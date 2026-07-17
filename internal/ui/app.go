@@ -81,7 +81,6 @@ type Model struct {
 	width           int
 	height          int
 	anim            int
-	splashLeft      int // frames of mist splash; 0 = main UI
 	settingsNote    string
 	pollGen         uint64 // drops stale traffic/refresh after mode switch etc.
 	tickN           uint64
@@ -118,7 +117,6 @@ func New(paths config.Paths, runner *core.Runner, client *api.Client) Model {
 		nodes:           []string{},
 		delays:          map[string]uint16{},
 		hasSubscription: subURL != "",
-		splashLeft:      22, // ~1.8s mist banner
 	}
 	if err != nil {
 		m.err = err.Error()
@@ -127,7 +125,11 @@ func New(paths config.Paths, runner *core.Runner, client *api.Client) Model {
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(tick(), animTick(), textinput.Blink)
+	cmds := []tea.Cmd{tick(), animTick(), textinput.Blink}
+	if m.hasSubscription {
+		cmds = append(cmds, func() tea.Msg { return autoConnectMsg{} })
+	}
+	return tea.Batch(cmds...)
 }
 
 func tick() tea.Cmd {
@@ -314,14 +316,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case animTickMsg:
 		m.tickAnim()
-		cmds := []tea.Cmd{animTick()}
-		if m.splashLeft > 0 {
-			m.splashLeft--
-			if m.splashLeft == 0 && m.hasSubscription {
-				cmds = append(cmds, func() tea.Msg { return autoConnectMsg{} })
-			}
-		}
-		return m, tea.Batch(cmds...)
+		return m, animTick()
 
 	case trafficMsg:
 		if msg.gen != m.pollGen || !m.running {

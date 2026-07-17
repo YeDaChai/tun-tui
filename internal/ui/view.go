@@ -11,9 +11,6 @@ import (
 )
 
 func (m Model) View() string {
-	if m.splashLeft > 0 {
-		return m.viewSplash()
-	}
 	switch m.screen {
 	case screenLinkList:
 		return m.viewLinkScreen()
