@@ -14,14 +14,14 @@ import (
 type ReadyFunc func(ctx context.Context) error
 
 // DefaultReadyCheck polls the external-controller HTTP API until it responds.
-// errTick is called between attempts (e.g. scan mihomo.log for TUN failures).
+// errTick is called between attempts (optional early-fail probe).
 func DefaultReadyCheck(addr, secret string, errTick func() error) ReadyFunc {
 	return func(ctx context.Context) error {
 		err := waitReady(ctx, func(ctx context.Context) error {
 			return pingController(ctx, addr, secret)
 		}, errTick, 100*time.Millisecond)
 		if err != nil && (errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)) {
-			return fmt.Errorf("内核未响应控制接口 %s，启动可能失败；详见 mihomo.log", addr)
+			return fmt.Errorf("内核未响应控制接口 %s，启动可能失败（检查权限或端口占用）", addr)
 		}
 		return err
 	}

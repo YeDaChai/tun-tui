@@ -1,6 +1,6 @@
 mode: rule
 ipv6: false
-log-level: warning
+log-level: silent
 geodata-mode: false
 geo-auto-update: false
 external-controller: 127.0.0.1:9090

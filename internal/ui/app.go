@@ -490,16 +490,6 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		return m.beginConnect()
-	case "u":
-		if !m.running {
-			m.err = "请先连接"
-			return m, nil
-		}
-		if m.work.busy() {
-			return m, nil
-		}
-		m = m.beginNodesLoad()
-		return m, tea.Batch(m.fetchNodesCmd(), spinnerTick())
 	case "t":
 		if !m.running {
 			m.err = "请先连接"

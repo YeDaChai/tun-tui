@@ -5,8 +5,6 @@ dist/
 
 # 运行时数据（开发目录）
 data/cache.db
-data/mihomo.log
-data/mihomo.log.old
 data/providers/
 data/subscription.url
 data/subscription.links

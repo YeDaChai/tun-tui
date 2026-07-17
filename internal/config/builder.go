@@ -156,7 +156,7 @@ func applyTunSettings(root map[string]any) {
 	// will block startup trying to download it when the file is missing/invalid.
 	root["geodata-mode"] = false
 	root["geo-auto-update"] = false
-	root["log-level"] = "warning"
+	root["log-level"] = "silent"
 	root["unified-delay"] = true
 	root["tun"] = tun
 }

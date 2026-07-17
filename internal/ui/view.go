@@ -40,6 +40,9 @@ var (
 	txColor      = lipgloss.NewStyle().Foreground(accent)
 	rxColor      = lipgloss.NewStyle().Foreground(ok)
 	dividerStyle = lipgloss.NewStyle().Foreground(subtle)
+	leaderDim    = dividerStyle
+	leaderActive = lipgloss.NewStyle().Foreground(suggest).Background(selBg)
+	leaderOn     = lipgloss.NewStyle().Foreground(ok) // current proxy
 	footerKey    = lipgloss.NewStyle().Foreground(accent).Bold(true)
 	footerLabel  = lipgloss.NewStyle().Foreground(muted)
 	footerSep    = lipgloss.NewStyle().Foreground(subtle)
@@ -284,7 +287,7 @@ func (m Model) formatListItem(idx, width int) string {
 	case current:
 		style = itemCurrent
 	}
-	return buildRow(width, mark, node, delayStr, style, delayStyle, active)
+	return buildRow(width, mark, node, delayStr, style, delayStyle, active, current)
 }
 
 func (m Model) renderFooter() string {
@@ -296,7 +299,7 @@ func (m Model) renderFooter() string {
 	}
 	keys := [][2]string{
 		{"S", sLabel}, {"JK", "选择"}, {"M", "模式"}, {"T", "测速"},
-		{"U", "更新"}, {"L", "订阅"}, {"P", "设置"}, {"Q", "退出"},
+		{"L", "订阅"}, {"P", "设置"}, {"Q", "退出"},
 	}
 	items := make([]string, 0, len(keys))
 	total := 0
@@ -407,7 +410,7 @@ func lineCount(s string) int {
 	return n
 }
 
-func buildRow(width int, mark, name, delay string, rowStyle, delayStyle lipgloss.Style, fullRow bool) string {
+func buildRow(width int, mark, name, delay string, rowStyle, delayStyle lipgloss.Style, fullRow, current bool) string {
 	nameMax := width - lipgloss.Width(mark)
 	if delay != "" {
 		// Reserve room for " ··· " leader so long names don't eat the whole row.
@@ -425,10 +428,25 @@ func buildRow(width int, mark, name, delay string, rowStyle, delayStyle lipgloss
 		gap = 0
 	}
 	leader := dashedLeader(gap)
-	if fullRow {
-		return rowStyle.Render(pad(prefix+leader+delay, width))
+	leaderStyle := leaderDim
+	switch {
+	case fullRow:
+		leaderStyle = leaderActive
+	case current:
+		leaderStyle = leaderOn
 	}
-	return rowStyle.Render(prefix) + dividerStyle.Render(leader) + delayStyle.Render(delay)
+	rest := width - lipgloss.Width(prefix) - lipgloss.Width(leader) - lipgloss.Width(delay)
+	if rest < 0 {
+		rest = 0
+	}
+	trail := strings.Repeat(" ", rest)
+	if fullRow {
+		return rowStyle.Render(prefix) +
+			leaderStyle.Render(leader) +
+			delayStyle.Background(selBg).Render(delay) +
+			lipgloss.NewStyle().Background(selBg).Render(trail)
+	}
+	return rowStyle.Render(prefix) + leaderStyle.Render(leader) + delayStyle.Render(delay) + trail
 }
 
 func dashedLeader(gap int) string {

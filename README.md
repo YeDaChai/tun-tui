@@ -32,7 +32,6 @@ macOS 若提示无法验证：运行 `xattr -d com.apple.quarantine ./tun-tui`
 | `Enter` | 确认节点 |
 | `M` | 切换模式（分流 / 全局 / 直连） |
 | `T` | 测速 |
-| `U` | 更新订阅 |
 | `L` | 管理订阅链接 |
 | `P` | 设置 |
 | `Q` | 退出 |
@@ -82,6 +81,6 @@ make release     # 打包到 dist/
 make help        # 查看全部目标
 ```
 
-发布：`git tag v0.2.4 && git push origin v0.2.4`
+发布：`git tag v0.2.5 && git push origin v0.2.5`
 
 MIT
