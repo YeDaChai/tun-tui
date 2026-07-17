@@ -87,6 +87,6 @@ make release     # 打包到 dist/
 make help        # 查看全部目标
 ```
 
-发布：`git tag v0.2.6 && git push origin v0.2.6`
+发布：`git tag v0.2.7 && git push origin v0.2.7`
 
 MIT
