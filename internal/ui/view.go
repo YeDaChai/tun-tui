@@ -215,15 +215,22 @@ func centerText(s string, width int) string {
 func (m Model) formatListItem(idx, width int) string {
 	node := m.nodes[idx]
 	active, current := idx == m.cursor, node == m.group.Now
+	burst := m.selectBursting(node)
 
 	mark := m.cursorMark(active)
-	if !active && current {
+	switch {
+	case burst:
+		mark = m.selectBurstMark()
+	case !active && current:
 		mark = "* "
 	}
 
 	delayStr := ""
 	delayStyle := itemNormal
-	if d, ok := m.delays[node]; ok {
+	if burst {
+		delayStr = selectBurstTail(m.selectFlash)
+		delayStyle = itemCurrent
+	} else if d, ok := m.delays[node]; ok {
 		if d > 0 {
 			delayStr = fmt.Sprintf("%dms", d)
 			switch {
@@ -244,12 +251,14 @@ func (m Model) formatListItem(idx, width int) string {
 
 	style := itemNormal
 	switch {
+	case burst:
+		style = itemCurrent
 	case active:
 		style = itemSelected
 	case current:
 		style = itemCurrent
 	}
-	return buildRow(width, mark, node, delayStr, style, delayStyle, active, current)
+	return buildRow(width, mark, node, delayStr, style, delayStyle, active, current || burst, burst, m.selectFlash)
 }
 
 func (m Model) renderFooter() string {
@@ -408,7 +417,7 @@ func lineCount(s string) int {
 	return n
 }
 
-func buildRow(width int, mark, name, delay string, rowStyle, delayStyle lipgloss.Style, fullRow, current bool) string {
+func buildRow(width int, mark, name, delay string, rowStyle, delayStyle lipgloss.Style, fullRow, current, mist bool, mistPhase int) string {
 	nameMax := width - cellWidth(mark)
 	if delay != "" {
 		nameMax -= cellWidth(delay) + 4
@@ -425,6 +434,9 @@ func buildRow(width int, mark, name, delay string, rowStyle, delayStyle lipgloss
 		gap = 0
 	}
 	leader := dashedLeader(gap)
+	if mist {
+		leader = mistLeader(gap, mistPhase)
+	}
 	leaderStyle := leaderDim
 	switch {
 	case fullRow:
@@ -454,6 +466,48 @@ func dashedLeader(gap int) string {
 		return strings.Repeat(" ", gap)
 	default:
 		return " " + strings.Repeat(".", gap-2) + " "
+	}
+}
+
+// mistLeader：选中成功时淡云带，宽度与 dashedLeader 一致。
+func mistLeader(gap, phase int) string {
+	switch {
+	case gap <= 0:
+		return ""
+	case gap <= 2:
+		return strings.Repeat(" ", gap)
+	}
+	inner := gap - 2
+	var b strings.Builder
+	b.Grow(gap)
+	b.WriteByte(' ')
+	for i := 0; i < inner; i++ {
+		switch (i + phase) % 3 {
+		case 0:
+			b.WriteByte('~')
+		case 1:
+			b.WriteByte('.')
+		default:
+			b.WriteByte(' ')
+		}
+	}
+	b.WriteByte(' ')
+	return b.String()
+}
+
+// selectBurstTail：右侧成功尾焰，固定 3 格。
+func selectBurstTail(flash int) string {
+	switch {
+	case flash >= 10:
+		return "~~~"
+	case flash >= 7:
+		return "~.~"
+	case flash >= 4:
+		return " ~ "
+	case flash >= 2:
+		return " . "
+	default:
+		return " * "
 	}
 }
 

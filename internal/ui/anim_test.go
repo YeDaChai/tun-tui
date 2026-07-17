@@ -29,3 +29,28 @@ func TestRatioFill(t *testing.T) {
 		t.Fatalf("over-quota clamps")
 	}
 }
+
+func TestSelectBurstMarkWidth(t *testing.T) {
+	m := Model{}
+	for flash := 1; flash <= selectFlashFrames; flash++ {
+		m.selectFlash = flash
+		got := m.selectBurstMark()
+		if cellWidth(got) != 2 {
+			t.Fatalf("flash=%d mark %q width=%d want 2", flash, got, cellWidth(got))
+		}
+		tail := selectBurstTail(flash)
+		if cellWidth(tail) != 3 {
+			t.Fatalf("flash=%d tail %q width=%d want 3", flash, tail, cellWidth(tail))
+		}
+	}
+}
+
+func TestMistLeaderWidth(t *testing.T) {
+	for _, gap := range []int{0, 1, 2, 5, 20} {
+		a := dashedLeader(gap)
+		b := mistLeader(gap, 3)
+		if cellWidth(a) != gap || cellWidth(b) != gap {
+			t.Fatalf("gap=%d a=%d b=%d", gap, cellWidth(a), cellWidth(b))
+		}
+	}
+}

@@ -34,6 +34,29 @@ func (m Model) cursorMark(active bool) string {
 	return "* "
 }
 
+// selectFlashFrames ≈ 1s @ 80ms tick：回车确认选节点的爆发时长。
+const selectFlashFrames = 12
+
+func (m Model) selectBursting(node string) bool {
+	return m.selectFlash > 0 && node != "" && node == m.selectFlashNode
+}
+
+// selectBurstMark：虚影放大再收束到落定星标。
+func (m Model) selectBurstMark() string {
+	switch {
+	case m.selectFlash >= 10:
+		return ">>"
+	case m.selectFlash >= 7:
+		return "~>"
+	case m.selectFlash >= 4:
+		return "*>"
+	case m.selectFlash >= 2:
+		return "*~"
+	default:
+		return "* "
+	}
+}
+
 // energyFill：约 1 MiB/s 满格（测试 / 预留进度条用）。
 func energyFill(rate int64, width int) int {
 	if width <= 0 || rate <= 0 {

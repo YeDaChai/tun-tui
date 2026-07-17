@@ -236,7 +236,7 @@ func (m Model) renderLinkListBox() string {
 			if i == m.linkCursor {
 				style, full = itemSelected, true
 			}
-			item := buildRow(innerW, mark, maskURL(m.linkURLs[i]), "", style, itemNormal, full, i == m.linkActive)
+			item := buildRow(innerW, mark, maskURL(m.linkURLs[i]), "", style, itemNormal, full, i == m.linkActive, false, 0)
 			body.WriteString(item + "\n")
 		}
 	}

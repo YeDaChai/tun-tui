@@ -81,6 +81,8 @@ type Model struct {
 	width           int
 	height          int
 	anim            int
+	selectFlash     int    // 回车选节点成功爆发剩余帧
+	selectFlashNode string // 爆发落在哪条节点
 	settingsNote    string
 	pollGen         uint64 // drops stale traffic/refresh after mode switch etc.
 	tickN           uint64
@@ -316,6 +318,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case animTickMsg:
 		m.tickAnim()
+		if m.selectFlash > 0 {
+			m.selectFlash--
+			if m.selectFlash == 0 {
+				m.selectFlashNode = ""
+			}
+		}
 		return m, animTick()
 
 	case trafficMsg:
@@ -371,8 +379,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.work = workIdle
 		if msg.err != nil {
 			m.err = msg.err.Error()
+			m.selectFlash = 0
+			m.selectFlashNode = ""
 		} else {
 			m.err = ""
+			if m.selectFlashNode != "" {
+				// API 成功：再爆一波确认。
+				m.selectFlash = selectFlashFrames
+			}
 		}
 		if msg.err != nil && !msg.added && !msg.deleted && m.screen == screenLinkList {
 			m.linkInputFocus = true
@@ -512,6 +526,8 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		node := m.nodes[m.cursor]
 		m.work = workActing
+		m.selectFlashNode = node
+		m.selectFlash = selectFlashFrames
 		return m, func() tea.Msg {
 			if err := m.api.SelectProxy(api.DefaultProxyGroup, node); err != nil {
 				return actionMsg{err: err}
