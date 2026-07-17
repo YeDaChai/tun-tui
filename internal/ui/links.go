@@ -218,8 +218,8 @@ func (m Model) renderLinkListBox() string {
 	}
 
 	var body strings.Builder
-	body.WriteString(sectionTitle.Render("*= 订阅 =*") + "\n")
-	body.WriteString(dividerStyle.Render(strings.Repeat("-", innerW)) + "\n")
+	body.WriteString(sectionTitle.Render(scrollPlaque("订阅")) + "\n")
+	body.WriteString(mistSep(innerW) + "\n")
 
 	if len(m.linkURLs) == 0 {
 		body.WriteString(textSubtle.Render("暂无链接 — 按 I 添加") + "\n")
@@ -241,7 +241,7 @@ func (m Model) renderLinkListBox() string {
 		}
 	}
 
-	body.WriteString(dividerStyle.Render(strings.Repeat("-", innerW)) + "\n")
+	body.WriteString(mistSep(innerW) + "\n")
 	if m.err != "" {
 		body.WriteString(textErr.Render("! "+truncate(m.err, innerW-2)) + "\n")
 	}
@@ -270,7 +270,7 @@ func (m Model) renderAddLinkBox() string {
 	}
 
 	var body strings.Builder
-	body.WriteString(sectionTitle.Render("*= 添加订阅 =*") + "\n\n")
+	body.WriteString(sectionTitle.Render(scrollPlaque("添加订阅")) + "\n\n")
 	body.WriteString(ti.View() + "\n")
 	if m.err != "" {
 		body.WriteString("\n" + textErr.Render("! "+truncate(m.err, innerW-2)) + "\n")

@@ -11,6 +11,9 @@ import (
 )
 
 func (m Model) View() string {
+	if m.splashLeft > 0 {
+		return m.viewSplash()
+	}
 	switch m.screen {
 	case screenLinkList:
 		return m.viewLinkScreen()
@@ -107,7 +110,6 @@ func (m Model) trafficBars() string {
 	if m.running {
 		up, down = formatRate(m.traffic.Up), formatRate(m.traffic.Down)
 	}
-	// 上行整段描金，下行整段仙青。
 	return txColor.Render("^ "+up) + textSubtle.Render("  ") + rxColor.Render("v "+down)
 }
 
@@ -120,20 +122,20 @@ func (m Model) renderProxyPanel() string {
 	f := newFrame(w, m.running)
 	var b strings.Builder
 
-	title := "*= 节点 =*"
+	title := scrollPlaque("节点")
 	switch {
 	case len(m.nodes) > 0 && m.group.Now != "":
-		title = fmt.Sprintf("*= 节点 %d/%d | %s =*", m.cursor+1, len(m.nodes), layoutString(m.group.Now))
+		title = scrollPlaque(fmt.Sprintf("节点 %d/%d | %s", m.cursor+1, len(m.nodes), layoutString(m.group.Now)))
 	case len(m.nodes) > 0 && m.work == workTesting:
-		title = fmt.Sprintf("*= 节点 %d/%d | 测速中 =*", m.cursor+1, len(m.nodes))
+		title = scrollPlaque(fmt.Sprintf("节点 %d/%d | 测速中", m.cursor+1, len(m.nodes)))
 	case len(m.nodes) > 0:
-		title = fmt.Sprintf("*= 节点 %d/%d =*", m.cursor+1, len(m.nodes))
+		title = scrollPlaque(fmt.Sprintf("节点 %d/%d", m.cursor+1, len(m.nodes)))
 	case m.work == workTesting:
-		title = "*= 节点 | 测速中 =*"
+		title = scrollPlaque("节点 | 测速中")
 	}
 	b.WriteString(f.top() + "\n")
 	b.WriteString(f.row(sectionTitle.Render(fitCells(title, inner))) + "\n")
-	b.WriteString(f.mid() + "\n")
+	b.WriteString(f.row(mistSep(inner)) + "\n")
 
 	for _, line := range strings.Split(m.renderNodeList(inner), "\n") {
 		b.WriteString(f.row(line) + "\n")
@@ -269,64 +271,44 @@ func (m Model) renderFooter() string {
 		{"L", "订阅"}, {"P", "设置"}, {"Q", "退出"},
 	}
 	items := make([]string, 0, len(keys))
-	total := 0
 	for _, k := range keys {
-		item := antiqueButton(k[0], k[1])
-		items = append(items, item)
-		total += cellWidth(item)
+		items = append(items, antiqueButton(k[0], k[1]))
 	}
 	var b strings.Builder
 	b.WriteString("\n")
 	b.WriteString(f.top() + "\n")
-	b.WriteString(f.row(distributeItems(items, total, inner)) + "\n")
+	b.WriteString(f.row(flexRow(items, inner)) + "\n")
 	b.WriteString(f.bottom())
 	return b.String()
 }
 
-// antiqueButton renders a 古风 ASCII button: [ S 连接 ]
+// antiqueButton: [S 关闭] — 紧凑印章格，无两侧云纹。
 func antiqueButton(key, label string) string {
 	return btnBorder.Render("[") +
-		footerKey.Render(" "+key+" ") +
-		btnLabel.Render(label+" ") +
+		footerKey.Render(key) +
+		textSubtle.Render(" ") +
+		btnLabel.Render(label) +
 		btnBorder.Render("]")
 }
 
-func modalBox(width int, body string) string {
-	return lipgloss.NewStyle().
-		Border(lipgloss.Border{
-			Top:         "=",
-			Bottom:      "=",
-			Left:        "|",
-			Right:       "|",
-			TopLeft:     "+",
-			TopRight:    "+",
-			BottomLeft:  "+",
-			BottomRight: "+",
-		}).
-		BorderForeground(accent).
-		Padding(1, 2).
-		Width(width).
-		Render(body)
-}
-
-// distributeItems spreads items across width with even gaps between them.
-func distributeItems(items []string, total, width int) string {
+// flexRow: justify-content: space-between — 首尾顶边，余宽均分到缝隙。
+func flexRow(items []string, width int) string {
 	if len(items) == 0 || width <= 0 {
 		return ""
+	}
+	total := 0
+	for _, it := range items {
+		total += cellWidth(it)
 	}
 	if len(items) == 1 {
 		return pad(truncate(items[0], width), width)
 	}
 	gaps := len(items) - 1
 	if total+gaps > width {
-		compact := make([]string, len(items))
-		copy(compact, items)
-		line := strings.Join(compact, footerSep.Render(" "))
-		return pad(truncate(line, width), width)
+		return pad(truncate(strings.Join(items, " "), width), width)
 	}
 	remain := width - total
-	base := remain / gaps
-	extra := remain % gaps
+	base, extra := remain/gaps, remain%gaps
 	var b strings.Builder
 	for i, item := range items {
 		b.WriteString(item)
@@ -338,7 +320,25 @@ func distributeItems(items []string, total, width int) string {
 			b.WriteString(strings.Repeat(" ", g))
 		}
 	}
-	return pad(b.String(), width)
+	return b.String()
+}
+
+func modalBox(width int, body string) string {
+	return lipgloss.NewStyle().
+		Border(lipgloss.Border{
+			Top:         "=",
+			Bottom:      "=",
+			Left:        "|",
+			Right:       "|",
+			TopLeft:     ".",
+			TopRight:    ".",
+			BottomLeft:  "'",
+			BottomRight: "'",
+		}).
+		BorderForeground(accent).
+		Padding(1, 2).
+		Width(width).
+		Render(body)
 }
 
 // --- layout helpers ---
@@ -360,21 +360,21 @@ func (f frame) top() string {
 	if f.width < 4 {
 		return f.border.Render(strings.Repeat("=", max(f.width, 0)))
 	}
-	return f.border.Render("+=" + strings.Repeat("=", f.width-4) + "=+")
+	return f.border.Render(".~" + strings.Repeat("=", f.width-4) + "~.")
 }
 
 func (f frame) bottom() string {
 	if f.width < 4 {
 		return f.border.Render(strings.Repeat("=", max(f.width, 0)))
 	}
-	return f.border.Render("+=" + strings.Repeat("=", f.width-4) + "=+")
+	return f.border.Render("'~" + strings.Repeat("=", f.width-4) + "~'")
 }
 
 func (f frame) mid() string {
 	if f.width < 4 {
-		return f.border.Render(strings.Repeat("-", max(f.width, 0)))
+		return f.border.Render(strings.Repeat("~", max(f.width, 0)))
 	}
-	return f.border.Render("+-" + strings.Repeat("-", f.width-4) + "-+")
+	return f.border.Render("~-" + strings.Repeat("~", f.width-4) + "-~")
 }
 
 func (f frame) row(s string) string {
