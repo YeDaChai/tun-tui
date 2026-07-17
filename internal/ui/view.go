@@ -103,11 +103,30 @@ func (m Model) hudPrimaryLine(width int) string {
 }
 
 func (m Model) trafficBars() string {
-	up, down := "--", "--"
+	up, down := int64(0), int64(0)
 	if m.running {
-		up, down = formatRate(m.traffic.Up), formatRate(m.traffic.Down)
+		up, down = m.traffic.Up, m.traffic.Down
 	}
-	return txColor.Render("^ "+up) + textSubtle.Render("  ") + rxColor.Render("v "+down)
+	return txColor.Render("^") + trafficBar(up, txColor) +
+		textSubtle.Render(" ") +
+		rxColor.Render("v") + trafficBar(down, rxColor)
+}
+
+// trafficBarWidth：固定格数，避免速率跳动撑抖 HUD。
+const trafficBarWidth = 4
+
+func trafficBar(rate int64, fill lipgloss.Style) string {
+	n := energyFill(rate, trafficBarWidth)
+	var b strings.Builder
+	b.WriteString(textSubtle.Render("["))
+	if n > 0 {
+		b.WriteString(fill.Render(strings.Repeat("#", n)))
+	}
+	if empty := trafficBarWidth - n; empty > 0 {
+		b.WriteString(textSubtle.Render(strings.Repeat("-", empty)))
+	}
+	b.WriteString(textSubtle.Render("]"))
+	return b.String()
 }
 
 func (m Model) renderProxyPanel() string {
@@ -550,19 +569,6 @@ func formatBytes(n int64) string {
 		return fmt.Sprintf("%.1fK", float64(n)/(1<<10))
 	default:
 		return fmt.Sprintf("%dB", n)
-	}
-}
-
-func formatRate(n int64) string {
-	switch {
-	case n >= 1<<30:
-		return fmt.Sprintf("%.1f GB/s", float64(n)/(1<<30))
-	case n >= 1<<20:
-		return fmt.Sprintf("%.1f MB/s", float64(n)/(1<<20))
-	case n >= 1<<10:
-		return fmt.Sprintf("%.1f KB/s", float64(n)/(1<<10))
-	default:
-		return fmt.Sprintf("%d B/s", n)
 	}
 }
 

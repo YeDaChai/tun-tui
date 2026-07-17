@@ -54,3 +54,20 @@ func TestMistLeaderWidth(t *testing.T) {
 		}
 	}
 }
+
+func TestTrafficBarWidth(t *testing.T) {
+	idle := trafficBar(0, txColor)
+	busy := trafficBar(1<<20, rxColor)
+	if cellWidth(idle) != trafficBarWidth+2 { // [####]
+		t.Fatalf("idle width=%d", cellWidth(idle))
+	}
+	if cellWidth(busy) != trafficBarWidth+2 {
+		t.Fatalf("busy width=%d", cellWidth(busy))
+	}
+	if energyFill(0, trafficBarWidth) != 0 {
+		t.Fatalf("idle fill")
+	}
+	if energyFill(1, trafficBarWidth) < 1 {
+		t.Fatalf("any traffic lights a cell")
+	}
+}
