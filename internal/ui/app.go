@@ -426,7 +426,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.running, m.err = true, ""
 		m = m.beginNodesLoad()
-		return m, tea.Batch(m.fetchNodesCmd(), syncGlobalCmd(m), spinnerTick())
+		return m, tea.Batch(m.fetchNodesCmd(), spinnerTick())
 
 	case clearDataMsg:
 		return m.applyClearedData(msg), nil
@@ -444,17 +444,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.updateMain(msg)
 	}
 	return m, nil
-}
-
-func syncGlobalCmd(m Model) tea.Cmd {
-	if config.NormalizeMode(m.mode) != "global" &&
-		config.NormalizeMode(config.LoadMode(m.paths.DataDir, "rule")) != "global" {
-		return nil
-	}
-	return func() tea.Msg {
-		_ = m.api.SyncGlobalFromProxy()
-		return nil
-	}
 }
 
 func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -575,6 +564,8 @@ func (m Model) fetchNodesCmd() tea.Cmd {
 		if err := m.api.UpdateProvider(config.ProviderName); err != nil {
 			return actionMsg{err: err}
 		}
+		// GLOBAL may lag during provider warm-up; best-effort sync for global mode.
+		_ = m.api.SyncGlobalFromProxyRetry()
 		return actionMsg{refresh: true, autoTest: true}
 	}
 }

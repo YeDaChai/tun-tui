@@ -7,8 +7,6 @@ import (
 	"os/user"
 	"path/filepath"
 	"runtime"
-
-	"tun-tui/internal/geodata"
 )
 
 //go:embed default_config.yaml
@@ -110,12 +108,7 @@ func bootstrap(dataDir string) error {
 		}
 	}
 	_ = chownToSudoUser(cfgPath)
-
-	if err := geodata.Install(dataDir); err != nil {
-		return fmt.Errorf("install bundled geodata: %w", err)
-	}
-	_ = chownToSudoUser(filepath.Join(dataDir, "geoip.metadb"))
-	_ = chownToSudoUser(filepath.Join(dataDir, "geosite.dat"))
+	// Geodata is installed on connect/reload via core.Runner.prepareConfig.
 	return nil
 }
 

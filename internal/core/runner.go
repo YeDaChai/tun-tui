@@ -11,7 +11,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/metacubex/mihomo/component/updater"
 	mihomocfg "github.com/metacubex/mihomo/config"
 	C "github.com/metacubex/mihomo/constant"
 	"github.com/metacubex/mihomo/constant/features"
@@ -26,13 +25,11 @@ import (
 )
 
 type Runner struct {
-	mu         sync.Mutex
-	running    bool
-	dataDir    string
-	cfgPath    string
-	secret     string
-	logReady   bool
-	readyCheck ReadyFunc // nil → DefaultReadyCheck
+	mu      sync.Mutex
+	running bool
+	dataDir string
+	cfgPath string
+	secret  string
 }
 
 func NewRunner(dataDir, cfgPath, secret string) *Runner {
@@ -45,13 +42,6 @@ func (r *Runner) SetSecret(secret string) {
 	r.secret = secret
 }
 
-// SetReadyCheck injects a custom readiness probe (tests). Pass nil to restore default.
-func (r *Runner) SetReadyCheck(fn ReadyFunc) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.readyCheck = fn
-}
-
 func (r *Runner) Start() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -59,7 +49,7 @@ func (r *Runner) Start() error {
 	if r.running {
 		return fmt.Errorf("mihomo is already running")
 	}
-	r.silenceLogging()
+	silenceLogging()
 
 	cfgBytes, err := r.prepareConfig()
 	if err != nil {
@@ -79,10 +69,6 @@ func (r *Runner) Start() error {
 	if err := r.verifyReady(); err != nil {
 		executor.Shutdown()
 		return err
-	}
-
-	if updater.GeoAutoUpdate() {
-		updater.RegisterGeoUpdater()
 	}
 
 	r.running = true
@@ -139,13 +125,9 @@ func syncTunnelMode(dataDir string) {
 	}
 }
 
-func (r *Runner) silenceLogging() {
-	if r.logReady {
-		return
-	}
+func silenceLogging() {
 	logrus.SetOutput(io.Discard)
 	mihomolog.SetLevel(mihomolog.SILENT)
-	r.logReady = true
 }
 
 func TunBuildReady() bool {
@@ -170,13 +152,9 @@ func (r *Runner) verifyReady() error {
 	if !TunBuildReady() {
 		return fmt.Errorf("%s", TunBuildHint())
 	}
-	check := r.readyCheck
-	if check == nil {
-		check = DefaultReadyCheck(config.APIControllerAddr, r.secret, nil)
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	return check(ctx)
+	return DefaultReadyCheck(config.APIControllerAddr, r.secret)(ctx)
 }
 
 // cleanupGeoFiles removes stale GeoIP.dat (triggers download hang) and tiny/corrupt

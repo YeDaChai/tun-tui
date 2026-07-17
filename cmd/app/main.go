@@ -126,68 +126,32 @@ func runUpdate(binName string) error {
 }
 
 func printHelp(binName string) {
-	cleanupNote := "macOS 上可自动清理；Linux/Windows 请重启网络"
+	cleanupNote := "异常退出后修复网络（Linux/Windows 可重启网络）"
 	if runtime.GOOS == "darwin" {
 		cleanupNote = "清理 TUN 残留路由（异常退出后无法上网时使用）"
 	}
-	fmt.Printf(`%s — 终端 VPN 管理工具（基于 Mihomo utun）
-
-通过虚拟网卡（utun）在网络层转发流量，无需应用层代理设置。
+	fmt.Printf(`%s — 基于 Mihomo 的 TUN 终端 VPN
 
 用法:
   sudo %s [选项]
   %s update
 
 命令:
-  update             检查并安装最新版本（无需先开 VPN）
+  update             检查并安装最新版本
 
 选项:
-  -data-dir <路径>   指定数据目录
+  -data-dir <路径>   数据目录（或环境变量 TUN_TUI_DATA_DIR）
   -cleanup           %s
-  -version           显示版本信息
-  -help              显示此帮助
+  -version           版本信息
+  -help              帮助
 
-环境变量:
-  TUN_TUI_DATA_DIR  数据目录（未指定时默认使用用户目录）
-
-数据目录:
-  macOS   ~/Library/Application Support/tun-tui
-  Linux   ~/.local/share/tun-tui
-  Windows %%APPDATA%%\tun-tui
-
-退出与清理:
-  按 q / Ctrl+C     正常退出，自动关闭 TUN 并清理路由
-  按 s 断开         仅断开 VPN，不退出程序
-  kill <pid>        收到终止信号后会尝试清理
-  kill -9 <pid>     无法清理，请执行: sudo %s -cleanup
-
-TUN 会临时修改系统路由表（非系统代理、非系统 DNS 设置）。
-
-快捷操作:
-  S         连接 / 断开
-  J/K       选择节点
-  Enter     确认节点
-  M         切换模式（分流 / 全局 / 直连）
-  T         测速
-  L         管理订阅链接
-  P         设置（数据目录 / Git）
-  Q         退出
-
-链接管理（按 L 进入）:
-  i / a     添加链接
-  Enter     使用选中链接
-  d         删除选中链接
-  Esc       返回主界面
-
-设置（按 P 进入）:
-  D         清理本地数据
-  Esc       返回主界面
+快捷键: S 连接/关闭 · JK 选择 · Enter 确认 · M 模式 · T 测速 · L 订阅 · P 设置 · Q 退出
 
 示例:
-  sudo %s                          # 使用默认数据目录
-  sudo TUN_TUI_DATA_DIR=./data %s  # 开发模式
-  %s update                        # 更新到最新版本
-  sudo %s -cleanup                 # 异常退出后修复网络
+  sudo %s
+  sudo TUN_TUI_DATA_DIR=./data %s
+  %s update
+  sudo %s -cleanup
 
-`, binName, binName, binName, cleanupNote, binName, binName, binName, binName, binName)
+`, binName, binName, binName, cleanupNote, binName, binName, binName, binName)
 }
