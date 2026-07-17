@@ -14,6 +14,7 @@ import (
 	"tun-tui/internal/api"
 	"tun-tui/internal/config"
 	"tun-tui/internal/core"
+	"tun-tui/internal/update"
 )
 
 type screen int
@@ -26,12 +27,15 @@ const (
 
 type tickMsg struct{}
 type spinnerTickMsg struct{}
+type trafficMsg struct {
+	gen     uint64
+	traffic api.Traffic
+}
 type refreshMsg struct {
+	gen             uint64
 	mode            string
-	traffic         api.Traffic
 	group           api.Proxy
 	provider        api.ProxyProvider
-	hasSubscription bool
 	autoTest        bool
 	err             error
 }
@@ -80,6 +84,9 @@ type Model struct {
 	height          int
 	spinner         int
 	settingsNote    string
+	pollGen         uint64 // drops stale traffic/refresh after mode switch etc.
+	tickN           uint64
+	updateInfo      update.Info
 }
 
 func Run(ctx context.Context, paths config.Paths, runner *core.Runner, client *api.Client, binName string) error {
@@ -212,37 +219,39 @@ func waitDelayResult(ch <-chan delayOneMsg) tea.Cmd {
 	}
 }
 
+func (m *Model) invalidatePolls() {
+	m.pollGen++
+}
+
 func refresh(m Model, autoTest bool) tea.Cmd {
+	gen := m.pollGen
 	return func() tea.Msg {
 		if !m.running {
-			return refreshMsg{err: fmt.Errorf("内核未运行")}
+			return refreshMsg{gen: gen, err: fmt.Errorf("内核未运行")}
 		}
 		cfg, err := m.api.Configs()
 		if err != nil {
-			return refreshMsg{err: err}
+			return refreshMsg{gen: gen, err: err}
 		}
-		traffic, _ := m.api.Traffic()
 		proxies, err := m.api.Proxies()
 		if err != nil {
-			return refreshMsg{err: err}
+			return refreshMsg{gen: gen, err: err}
 		}
 
 		group, ok := proxies.Proxies[api.DefaultProxyGroup]
 		if !ok {
 			return refreshMsg{
-				mode:    config.NormalizeMode(cfg.Mode),
-				traffic: traffic,
-				err:     fmt.Errorf("找不到代理组"),
+				gen:  gen,
+				mode: config.NormalizeMode(cfg.Mode),
+				err:  fmt.Errorf("找不到代理组"),
 			}
 		}
 
-		subURL, _ := config.LoadSubscriptionURL(m.paths.DataDir)
 		msg := refreshMsg{
-			mode:            config.NormalizeMode(cfg.Mode),
-			traffic:         traffic,
-			group:           group,
-			hasSubscription: subURL != "",
-			autoTest:        autoTest,
+			gen:      gen,
+			mode:     config.NormalizeMode(cfg.Mode),
+			group:    group,
+			autoTest: autoTest,
 		}
 		if providers, err := m.api.Providers(); err == nil {
 			if p, ok := providers.Providers[config.ProviderName]; ok {
@@ -250,6 +259,17 @@ func refresh(m Model, autoTest bool) tea.Cmd {
 			}
 		}
 		return msg
+	}
+}
+
+func pollTraffic(m Model) tea.Cmd {
+	gen := m.pollGen
+	return func() tea.Msg {
+		t, err := m.api.Traffic()
+		if err != nil {
+			return trafficMsg{gen: gen}
+		}
+		return trafficMsg{gen: gen, traffic: t}
 	}
 }
 
@@ -292,7 +312,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		cmds := []tea.Cmd{tick()}
 		if m.running && m.screen == screenMain && !m.work.busy() {
-			cmds = append(cmds, refresh(m, false))
+			m.tickN++
+			cmds = append(cmds, pollTraffic(m))
+			// Full node/mode/provider poll every ~6s; traffic stays at 2s.
+			if m.tickN%3 == 1 {
+				cmds = append(cmds, refresh(m, false))
+			}
 		}
 		return m, tea.Batch(cmds...)
 
@@ -303,9 +328,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.spinner++
 		return m, spinnerTick()
 
+	case trafficMsg:
+		if msg.gen != m.pollGen || !m.running {
+			return m, nil
+		}
+		m.traffic = msg.traffic
+		return m, nil
+
 	case refreshMsg:
-		// Drop stale polls that finish after S disconnect, or they paint the old UI back.
-		if !m.running {
+		// Drop stale polls (e.g. in-flight before M mode switch) so optimistic UI sticks.
+		if msg.gen != m.pollGen || !m.running || m.work.busy() {
 			return m, nil
 		}
 		if msg.err != nil {
@@ -314,10 +346,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.err = ""
 		m.mode = msg.mode
-		m.traffic = msg.traffic
 		m.group = msg.group
 		m.provider = msg.provider
-		m.hasSubscription = msg.hasSubscription
 		m.nodes = msg.group.All
 		m.clampListScroll()
 
@@ -326,9 +356,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			var delayCmd tea.Cmd
 			m, delayCmd = m.beginDelayTest()
 			cmds = append(cmds, delayCmd)
-		}
-		if cmd := syncGlobalCmd(m); cmd != nil {
-			cmds = append(cmds, cmd)
 		}
 		return m, tea.Batch(cmds...)
 
@@ -406,6 +433,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case clearDataMsg:
 		return m.applyClearedData(msg), nil
 
+	case checkUpdateMsg:
+		return m.applyCheckUpdate(msg), nil
+
+	case applyUpdateMsg:
+		return m.applyAppUpdate(msg), nil
+
 	case autoConnectMsg:
 		return m.beginConnect()
 
@@ -448,6 +481,7 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		if m.running {
 			m.stopDelayTest()
+			m.invalidatePolls()
 			err := m.runner.Stop()
 			m = m.resetIdleState()
 			if err != nil {
@@ -487,6 +521,7 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.work.busy() {
 			return m, nil
 		}
+		m.invalidatePolls()
 		m.work = workActing
 		next := nextMode(m.mode)
 		m.mode = next
@@ -498,7 +533,9 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if err := m.api.PatchMode(next); err != nil {
 				return actionMsg{err: err}
 			}
-			return actionMsg{refresh: true}
+			// Mode already painted optimistically; skip refresh so a slow Configs
+			// reply cannot flash the previous label (直连↔分流).
+			return actionMsg{}
 		}
 	case "k", "up":
 		m.moveCursor(-1)
@@ -524,6 +561,7 @@ func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m Model) beginNodesLoad() Model {
 	m.stopDelayTest()
+	m.invalidatePolls()
 	m.work = workLoadingNodes
 	m.err = ""
 	m.nodes = nil
@@ -535,6 +573,7 @@ func (m Model) beginNodesLoad() Model {
 // resetIdleState restores the pre-connect UI, same as a fresh launch before Start.
 func (m Model) resetIdleState() Model {
 	m.stopDelayTest()
+	m.invalidatePolls()
 	m.running = false
 	m.work = workIdle
 	m.nodes = nil
@@ -571,6 +610,7 @@ func (m Model) beginConnect() (Model, tea.Cmd) {
 		return m, nil
 	}
 	m.stopDelayTest()
+	m.invalidatePolls()
 	m.work = workConnecting
 	m.err = ""
 	m.nodes = nil

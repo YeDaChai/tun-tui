@@ -144,11 +144,15 @@ func syncTunnelMode(dataDir string) {
 	}
 }
 
+// ponytail: 2MiB ceiling — enough for TUN error scans; rotate to .old instead of unbounded growth.
+const maxMihomoLogBytes = 2 << 20
+
 func (r *Runner) setupLogging() error {
 	if r.logReady {
 		return nil
 	}
 	path := filepath.Join(r.dataDir, "mihomo.log")
+	rotateLogIfNeeded(path, maxMihomoLogBytes)
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return fmt.Errorf("open log file: %w", err)
@@ -159,6 +163,14 @@ func (r *Runner) setupLogging() error {
 	r.logFile = f
 	r.logReady = true
 	return nil
+}
+
+func rotateLogIfNeeded(path string, maxBytes int64) {
+	info, err := os.Stat(path)
+	if err != nil || info.Size() < maxBytes {
+		return
+	}
+	_ = os.Rename(path, path+".old")
 }
 
 func (r *Runner) closeLogging() {

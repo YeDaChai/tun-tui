@@ -11,7 +11,8 @@ func providerCachePath(dataDir string) string {
 	return filepath.Join(dataDir, "providers", providerCacheFile)
 }
 
-// ClearProviderCache drops the on-disk node list so each start/reload fetches fresh.
+// ClearProviderCache drops the on-disk node list so the next Parse/Update fetches fresh.
+// Call when the active subscription URL changes — not on ordinary connect (reuse cache).
 func ClearProviderCache(dataDir string) error {
 	if err := os.MkdirAll(filepath.Join(dataDir, "providers"), 0o755); err != nil {
 		return err

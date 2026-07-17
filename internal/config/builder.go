@@ -27,9 +27,6 @@ func BuildConfigBytes(dataDir, cfgPath, apiSecret string) ([]byte, error) {
 		if err := ValidateSubscriptionURL(subURL); err != nil {
 			return nil, fmt.Errorf("订阅地址不安全: %w", err)
 		}
-		if err := ClearProviderCache(dataDir); err != nil {
-			return nil, err
-		}
 	}
 	if err := applyProvider(root, subURL); err != nil {
 		return nil, err

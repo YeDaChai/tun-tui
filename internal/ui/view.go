@@ -290,9 +290,13 @@ func (m Model) formatListItem(idx, width int) string {
 func (m Model) renderFooter() string {
 	w := m.contentWidth()
 	f := newFrame(w, false)
+	sLabel := "连接"
+	if m.running {
+		sLabel = "关闭"
+	}
 	keys := [][2]string{
-		{"S", "连接"}, {"JK", "选择"}, {"M", "模式"}, {"T", "测速"},
-		{"U", "更新"}, {"L", "链接"}, {"P", "设置"}, {"Q", "退出"},
+		{"S", sLabel}, {"JK", "选择"}, {"M", "模式"}, {"T", "测速"},
+		{"U", "更新"}, {"L", "订阅"}, {"P", "设置"}, {"Q", "退出"},
 	}
 	items := make([]string, 0, len(keys))
 	total := 0
@@ -406,25 +410,36 @@ func lineCount(s string) int {
 func buildRow(width int, mark, name, delay string, rowStyle, delayStyle lipgloss.Style, fullRow bool) string {
 	nameMax := width - lipgloss.Width(mark)
 	if delay != "" {
-		nameMax -= lipgloss.Width(delay)
+		// Reserve room for " ··· " leader so long names don't eat the whole row.
+		nameMax -= lipgloss.Width(delay) + 4
 	}
 	if nameMax < 1 {
 		nameMax = 1
 	}
 	prefix := mark + truncate(name, nameMax)
-	plain := prefix
-	if delay != "" {
-		gap := width - lipgloss.Width(prefix) - lipgloss.Width(delay)
-		if gap < 0 {
-			gap = 0
-		}
-		plain = prefix + strings.Repeat(" ", gap) + delay
+	if delay == "" {
+		return rowStyle.Render(pad(prefix, width))
 	}
-	plain = pad(plain, width)
-	if fullRow || delay == "" {
-		return rowStyle.Render(plain)
+	gap := width - lipgloss.Width(prefix) - lipgloss.Width(delay)
+	if gap < 0 {
+		gap = 0
 	}
-	return rowStyle.Render(strings.TrimSuffix(plain, delay)) + delayStyle.Render(delay)
+	leader := dashedLeader(gap)
+	if fullRow {
+		return rowStyle.Render(pad(prefix+leader+delay, width))
+	}
+	return rowStyle.Render(prefix) + dividerStyle.Render(leader) + delayStyle.Render(delay)
+}
+
+func dashedLeader(gap int) string {
+	switch {
+	case gap <= 0:
+		return ""
+	case gap <= 2:
+		return strings.Repeat(" ", gap)
+	default:
+		return " " + strings.Repeat("·", gap-2) + " "
+	}
 }
 
 func usageCircle(used, total int64) string {
