@@ -4,7 +4,6 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 
 	"tun-tui/internal/config"
 	"tun-tui/internal/update"
@@ -103,8 +102,8 @@ func (m Model) renderSettingsBox() string {
 	}
 
 	var body strings.Builder
-	body.WriteString(sectionTitle.Render("设置") + "\n")
-	body.WriteString(dividerStyle.Render(strings.Repeat("─", innerW)) + "\n\n")
+	body.WriteString(sectionTitle.Render("*= 设置 =*") + "\n")
+	body.WriteString(dividerStyle.Render(strings.Repeat("-", innerW)) + "\n\n")
 
 	body.WriteString(textSubtle.Render("版本") + "\n")
 	body.WriteString(modeActive.Render(truncate("当前 "+version.Version, innerW)) + "\n")
@@ -124,15 +123,10 @@ func (m Model) renderSettingsBox() string {
 	}
 
 	body.WriteString("\n")
-	body.WriteString(dividerStyle.Render(strings.Repeat("─", innerW)) + "\n")
-	body.WriteString(footerKey.Render("D") + footerLabel.Render(" 清理数据"))
-	body.WriteString(footerSep.Render("  "))
-	body.WriteString(footerKey.Render("ESC") + footerLabel.Render(" 关闭"))
+	body.WriteString(dividerStyle.Render(strings.Repeat("-", innerW)) + "\n")
+	body.WriteString(antiqueButton("D", "清理数据"))
+	body.WriteString(footerSep.Render(" "))
+	body.WriteString(antiqueButton("ESC", "关闭"))
 
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(accent).
-		Padding(1, 2).
-		Width(modalW).
-		Render(strings.TrimRight(body.String(), "\n"))
+	return modalBox(modalW, strings.TrimRight(body.String(), "\n"))
 }

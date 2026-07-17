@@ -71,7 +71,6 @@ func (m Model) updateLinkList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		cmds := []tea.Cmd{m.deleteLink(m.linkCursor)}
 		if m.running && m.linkCursor == m.linkActive {
 			m = m.beginNodesLoad()
-			cmds = append(cmds, spinnerTick())
 		} else {
 			m.work = workActing
 		}
@@ -88,7 +87,6 @@ func (m Model) updateLinkList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		cmds := []tea.Cmd{m.selectLink(m.linkCursor)}
 		if m.running {
 			m = m.beginNodesLoad()
-			cmds = append(cmds, spinnerTick())
 		} else {
 			m.work = workActing
 		}
@@ -123,7 +121,6 @@ func (m Model) updateLinkInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		cmds := []tea.Cmd{m.addLink(url)}
 		if m.running {
 			m = m.beginNodesLoad()
-			cmds = append(cmds, spinnerTick())
 		} else {
 			m.work = workActing
 		}
@@ -221,8 +218,8 @@ func (m Model) renderLinkListBox() string {
 	}
 
 	var body strings.Builder
-	body.WriteString(sectionTitle.Render("订阅链接") + "\n")
-	body.WriteString(dividerStyle.Render(strings.Repeat("─", innerW)) + "\n")
+	body.WriteString(sectionTitle.Render("*= 订阅 =*") + "\n")
+	body.WriteString(dividerStyle.Render(strings.Repeat("-", innerW)) + "\n")
 
 	if len(m.linkURLs) == 0 {
 		body.WriteString(textSubtle.Render("暂无链接 — 按 I 添加") + "\n")
@@ -231,9 +228,9 @@ func (m Model) renderLinkListBox() string {
 		for i := m.linkRowOffset; i < vp.end; i++ {
 			mark := "  "
 			if i == m.linkCursor {
-				mark = "› "
+				mark = "> "
 			} else if i == m.linkActive {
-				mark = "● "
+				mark = "* "
 			}
 			style, full := itemNormal, false
 			if i == m.linkCursor {
@@ -244,24 +241,19 @@ func (m Model) renderLinkListBox() string {
 		}
 	}
 
-	body.WriteString(dividerStyle.Render(strings.Repeat("─", innerW)) + "\n")
+	body.WriteString(dividerStyle.Render(strings.Repeat("-", innerW)) + "\n")
 	if m.err != "" {
 		body.WriteString(textErr.Render("! "+truncate(m.err, innerW-2)) + "\n")
 	}
-	body.WriteString(footerKey.Render("↵") + footerLabel.Render(" 使用"))
-	body.WriteString(footerSep.Render("  "))
-	body.WriteString(footerKey.Render("I") + footerLabel.Render(" 添加"))
-	body.WriteString(footerSep.Render("  "))
-	body.WriteString(footerKey.Render("D") + footerLabel.Render(" 删除"))
-	body.WriteString(footerSep.Render("  "))
-	body.WriteString(footerKey.Render("ESC") + footerLabel.Render(" 关闭"))
+	body.WriteString(antiqueButton("↵", "使用"))
+	body.WriteString(footerSep.Render(" "))
+	body.WriteString(antiqueButton("I", "添加"))
+	body.WriteString(footerSep.Render(" "))
+	body.WriteString(antiqueButton("D", "删除"))
+	body.WriteString(footerSep.Render(" "))
+	body.WriteString(antiqueButton("ESC", "关闭"))
 
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(accent).
-		Padding(1, 2).
-		Width(modalW).
-		Render(strings.TrimRight(body.String(), "\n"))
+	return modalBox(modalW, strings.TrimRight(body.String(), "\n"))
 }
 
 func (m Model) renderAddLinkBox() string {
@@ -278,20 +270,15 @@ func (m Model) renderAddLinkBox() string {
 	}
 
 	var body strings.Builder
-	body.WriteString(sectionTitle.Render("添加订阅链接") + "\n\n")
+	body.WriteString(sectionTitle.Render("*= 添加订阅 =*") + "\n\n")
 	body.WriteString(ti.View() + "\n")
 	if m.err != "" {
 		body.WriteString("\n" + textErr.Render("! "+truncate(m.err, innerW-2)) + "\n")
 	}
 	body.WriteString("\n")
-	body.WriteString(footerKey.Render("↵") + footerLabel.Render(" 确认"))
-	body.WriteString(footerSep.Render("  "))
-	body.WriteString(footerKey.Render("ESC") + footerLabel.Render(" 取消"))
+	body.WriteString(antiqueButton("↵", "确认"))
+	body.WriteString(footerSep.Render(" "))
+	body.WriteString(antiqueButton("ESC", "取消"))
 
-	return lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		BorderForeground(accent).
-		Padding(1, 2).
-		Width(modalW).
-		Render(strings.TrimRight(body.String(), "\n"))
+	return modalBox(modalW, strings.TrimRight(body.String(), "\n"))
 }

@@ -6,51 +6,8 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
 
 	"tun-tui/internal/config"
-)
-
-// Dark palette aligned with Claude Code defaults (warm coral accent, readable grays).
-var (
-	accent  = lipgloss.Color("#D77757") // claude
-	suggest = lipgloss.Color("#B1B9F9") // suggestion / permission
-	ok      = lipgloss.Color("#4EBA65") // success
-	warn    = lipgloss.Color("#FFC107") // warning
-	danger  = lipgloss.Color("#FF6B80") // error
-	muted   = lipgloss.Color("#999999") // inactive — secondary labels
-	subtle  = lipgloss.Color("#666666") // chrome / borders (brighter than CC #505050)
-	selBg   = lipgloss.Color("#2A2420") // warm selection wash
-
-	frameBorderActive = lipgloss.NewStyle().Foreground(accent)
-	statusOnline      = lipgloss.NewStyle().Foreground(ok).Bold(true)
-	statusOffline     = lipgloss.NewStyle().Foreground(muted)
-	statusLoading     = lipgloss.NewStyle().Foreground(warn).Bold(true)
-	textErr           = lipgloss.NewStyle().Foreground(danger)
-	textSubtle        = lipgloss.NewStyle().Foreground(muted)
-	itemSelected      = lipgloss.NewStyle().
-				Foreground(suggest).
-				Background(selBg).
-				Bold(true)
-	itemCurrent  = lipgloss.NewStyle().Foreground(ok).Bold(true)
-	itemNormal   = lipgloss.NewStyle().Foreground(muted)
-	pingFast     = lipgloss.NewStyle().Foreground(ok)
-	pingMid      = lipgloss.NewStyle().Foreground(warn)
-	pingSlow     = lipgloss.NewStyle().Foreground(danger)
-	txColor      = lipgloss.NewStyle().Foreground(accent)
-	rxColor      = lipgloss.NewStyle().Foreground(ok)
-	dividerStyle = lipgloss.NewStyle().Foreground(subtle)
-	leaderDim    = dividerStyle
-	leaderActive = lipgloss.NewStyle().Foreground(suggest).Background(selBg)
-	leaderOn     = lipgloss.NewStyle().Foreground(ok) // current proxy
-	footerKey    = lipgloss.NewStyle().Foreground(accent).Bold(true)
-	footerLabel  = lipgloss.NewStyle().Foreground(muted)
-	footerSep    = lipgloss.NewStyle().Foreground(subtle)
-	sectionTitle = lipgloss.NewStyle().Foreground(accent).Bold(true)
-	barFull      = lipgloss.NewStyle().Foreground(ok)
-	barWarning   = lipgloss.NewStyle().Foreground(warn)
-	barDanger    = lipgloss.NewStyle().Foreground(danger)
-	modeActive   = lipgloss.NewStyle().Foreground(accent).Bold(true)
 )
 
 func (m Model) View() string {
@@ -103,12 +60,16 @@ func (m Model) modalWidth(max int) int {
 
 func (m Model) renderHUD() string {
 	w := m.contentWidth()
-	f := newFrame(w, false)
+	inner := w - 2
+	if inner < 8 {
+		inner = w
+	}
+	f := newFrame(w, m.running || m.work == workConnecting)
 	var b strings.Builder
 	b.WriteString(f.top() + "\n")
-	b.WriteString(f.row(m.hudPrimaryLine(w)) + "\n")
+	b.WriteString(f.row(m.hudPrimaryLine(inner)) + "\n")
 	if m.err != "" {
-		b.WriteString(f.row(textErr.Render("! "+truncate(m.err, w-2))) + "\n")
+		b.WriteString(f.row(textErr.Render("! "+truncate(m.err, inner-2))) + "\n")
 	}
 	b.WriteString(f.bottom() + "\n")
 	return b.String()
@@ -117,38 +78,37 @@ func (m Model) renderHUD() string {
 func (m Model) connectionLine() string {
 	switch {
 	case m.running:
-		return statusOnline.Render("● 已连接")
+		return modeActive.Render("*") + statusOnline.Render(" 已连接")
 	case m.work == workConnecting:
-		return statusLoading.Render("… 连接中")
+		return statusLoading.Render(m.spinnerGlyph() + " 连接中")
 	default:
-		return statusOffline.Render("○ 未连接")
+		return statusOffline.Render("- 未连接")
 	}
 }
 
 func (m Model) hudPrimaryLine(width int) string {
-	sep := textSubtle.Render("  ·  ")
+	sep := textSubtle.Render("  ")
 	leftParts := []string{m.connectionLine()}
 	if info := m.provider.SubscriptionInfo; info != nil && info.Total > 0 {
-		leftParts = append(leftParts, usageCircle(info.Upload+info.Download, info.Total))
+		leftParts = append(leftParts, usageBar(info.Upload+info.Download, info.Total))
 	}
-	leftParts = append(leftParts, m.trafficLine())
+	leftParts = append(leftParts, m.trafficBars())
 	left := strings.Join(leftParts, sep)
 
 	if m.mode == "" {
 		return truncate(left, width)
 	}
 	right := textSubtle.Render("模式 ") + modeActive.Render(modeLabel(m.mode))
-	return newFrame(width, false).split(left, right)
+	return splitRow(width, left, right)
 }
 
-func (m Model) trafficLine() string {
+func (m Model) trafficBars() string {
 	up, down := "--", "--"
 	if m.running {
 		up, down = formatRate(m.traffic.Up), formatRate(m.traffic.Down)
 	}
-	return txColor.Render("↑") + " " + up +
-		textSubtle.Render("  ") +
-		rxColor.Render("↓") + " " + down
+	// 上行整段描金，下行整段仙青。
+	return txColor.Render("^ "+up) + textSubtle.Render("  ") + rxColor.Render("v "+down)
 }
 
 func (m Model) renderProxyPanel() string {
@@ -156,28 +116,31 @@ func (m Model) renderProxyPanel() string {
 	if w < 16 {
 		w = 16
 	}
+	inner := w - 2
 	f := newFrame(w, m.running)
 	var b strings.Builder
+
+	title := "*= 节点 =*"
+	switch {
+	case len(m.nodes) > 0 && m.group.Now != "":
+		title = fmt.Sprintf("*= 节点 %d/%d | %s =*", m.cursor+1, len(m.nodes), layoutString(m.group.Now))
+	case len(m.nodes) > 0 && m.work == workTesting:
+		title = fmt.Sprintf("*= 节点 %d/%d | 测速中 =*", m.cursor+1, len(m.nodes))
+	case len(m.nodes) > 0:
+		title = fmt.Sprintf("*= 节点 %d/%d =*", m.cursor+1, len(m.nodes))
+	case m.work == workTesting:
+		title = "*= 节点 | 测速中 =*"
+	}
 	b.WriteString(f.top() + "\n")
+	b.WriteString(f.row(sectionTitle.Render(fitCells(title, inner))) + "\n")
+	b.WriteString(f.mid() + "\n")
 
-	title := " 节点 "
-	if len(m.nodes) > 0 {
-		title = fmt.Sprintf(" 节点 [%d/%d] ", m.cursor+1, len(m.nodes))
-	}
-	if m.group.Now != "" {
-		title += "· " + m.group.Now + " "
-	}
-	b.WriteString(f.row(sectionTitle.Render(truncate(title, w))) + "\n")
-	b.WriteString(f.row(dividerStyle.Render(strings.Repeat("─", w))) + "\n")
-
-	for _, line := range strings.Split(m.renderNodeList(w), "\n") {
+	for _, line := range strings.Split(m.renderNodeList(inner), "\n") {
 		b.WriteString(f.row(line) + "\n")
 	}
 	b.WriteString(f.bottom())
 	return b.String()
 }
-
-var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
 func (m Model) renderNodeList(innerW int) string {
 	budget := m.listBudget()
@@ -224,42 +187,39 @@ func (m Model) emptyNodeLines(width, height int) []string {
 func (m Model) emptyPlaceholder() []string {
 	switch {
 	case m.work == workConnecting:
-		frame := spinnerFrames[m.spinner%len(spinnerFrames)]
-		return []string{textSubtle.Render(frame + " 正在连接…")}
+		return []string{textSubtle.Render(m.spinnerGlyph() + " 正在连接…")}
 	case m.work == workLoadingNodes:
-		frame := spinnerFrames[m.spinner%len(spinnerFrames)]
-		return []string{textSubtle.Render(frame + " 加载节点中…")}
+		return []string{textSubtle.Render(m.spinnerGlyph() + " 加载节点中…")}
 	case m.running && m.err == "":
-		return []string{textSubtle.Render("加载节点中…")}
+		return []string{textSubtle.Render(m.spinnerGlyph() + " 加载节点中…")}
 	case m.running && m.err != "":
 		return []string{
-			textErr.Render("404"),
+			textErr.Render("! 错误"),
 			textSubtle.Render("代理加载失败"),
 		}
 	case m.hasSubscription:
-		return []string{textSubtle.Render("等待连接…")}
+		return []string{textSubtle.Render("按 S 连接")}
 	default:
 		return []string{textSubtle.Render("按 L 添加订阅链接")}
 	}
 }
 
 func centerText(s string, width int) string {
-	w := lipgloss.Width(s)
+	w := cellWidth(s)
 	if w >= width {
 		return truncate(s, width)
 	}
 	left := (width - w) / 2
-	return pad(strings.Repeat(" ", left)+s, width)
+	return fitCells(strings.Repeat(" ", left)+s, width)
 }
 
 func (m Model) formatListItem(idx, width int) string {
 	node := m.nodes[idx]
 	active, current := idx == m.cursor, node == m.group.Now
-	mark := "  "
-	if active {
-		mark = "› "
-	} else if current {
-		mark = "● "
+
+	mark := m.cursorMark(active)
+	if !active && current {
+		mark = "* "
 	}
 
 	delayStr := ""
@@ -276,8 +236,11 @@ func (m Model) formatListItem(idx, width int) string {
 				delayStyle = pingSlow
 			}
 		} else {
-			delayStr, delayStyle = "连接失败", pingSlow
+			delayStr, delayStyle = "失败", pingSlow
 		}
+	} else if m.work == workTesting {
+		delayStr = m.spinnerGlyph() + ".."
+		delayStyle = textSubtle
 	}
 
 	style := itemNormal
@@ -292,6 +255,10 @@ func (m Model) formatListItem(idx, width int) string {
 
 func (m Model) renderFooter() string {
 	w := m.contentWidth()
+	inner := w - 2
+	if inner < 8 {
+		inner = w
+	}
 	f := newFrame(w, false)
 	sLabel := "连接"
 	if m.running {
@@ -304,11 +271,42 @@ func (m Model) renderFooter() string {
 	items := make([]string, 0, len(keys))
 	total := 0
 	for _, k := range keys {
-		item := footerKey.Render(k[0]) + footerLabel.Render(" "+k[1])
+		item := antiqueButton(k[0], k[1])
 		items = append(items, item)
-		total += lipgloss.Width(item)
+		total += cellWidth(item)
 	}
-	return "\n" + f.bottom() + "\n" + distributeItems(items, total, w)
+	var b strings.Builder
+	b.WriteString("\n")
+	b.WriteString(f.top() + "\n")
+	b.WriteString(f.row(distributeItems(items, total, inner)) + "\n")
+	b.WriteString(f.bottom())
+	return b.String()
+}
+
+// antiqueButton renders a 古风 ASCII button: [ S 连接 ]
+func antiqueButton(key, label string) string {
+	return btnBorder.Render("[") +
+		footerKey.Render(" "+key+" ") +
+		btnLabel.Render(label+" ") +
+		btnBorder.Render("]")
+}
+
+func modalBox(width int, body string) string {
+	return lipgloss.NewStyle().
+		Border(lipgloss.Border{
+			Top:         "=",
+			Bottom:      "=",
+			Left:        "|",
+			Right:       "|",
+			TopLeft:     "+",
+			TopRight:    "+",
+			BottomLeft:  "+",
+			BottomRight: "+",
+		}).
+		BorderForeground(accent).
+		Padding(1, 2).
+		Width(width).
+		Render(body)
 }
 
 // distributeItems spreads items across width with even gaps between them.
@@ -358,45 +356,48 @@ func newFrame(width int, active bool) frame {
 	return frame{width: width, border: b}
 }
 
-func (f frame) top() string    { return f.border.Render(strings.Repeat("─", f.width)) }
-func (f frame) bottom() string { return f.border.Render(strings.Repeat("─", f.width)) }
-func (f frame) row(s string) string {
-	return pad(truncate(s, f.width), f.width)
+func (f frame) top() string {
+	if f.width < 4 {
+		return f.border.Render(strings.Repeat("=", max(f.width, 0)))
+	}
+	return f.border.Render("+=" + strings.Repeat("=", f.width-4) + "=+")
 }
-func (f frame) split(left, right string) string {
-	lw, rw := lipgloss.Width(left), lipgloss.Width(right)
-	gap := f.width - lw - rw
+
+func (f frame) bottom() string {
+	if f.width < 4 {
+		return f.border.Render(strings.Repeat("=", max(f.width, 0)))
+	}
+	return f.border.Render("+=" + strings.Repeat("=", f.width-4) + "=+")
+}
+
+func (f frame) mid() string {
+	if f.width < 4 {
+		return f.border.Render(strings.Repeat("-", max(f.width, 0)))
+	}
+	return f.border.Render("+-" + strings.Repeat("-", f.width-4) + "-+")
+}
+
+func (f frame) row(s string) string {
+	inner := f.width - 2
+	if inner < 1 {
+		return fitCells(s, f.width)
+	}
+	return f.border.Render("|") + fitCells(s, inner) + f.border.Render("|")
+}
+
+func splitRow(width int, left, right string) string {
+	lw, rw := cellWidth(left), cellWidth(right)
+	gap := width - lw - rw
 	if gap < 1 {
 		gap = 1
-		left = truncate(left, f.width-rw-gap)
+		left = truncate(left, width-rw-gap)
+		lw = cellWidth(left)
+		gap = width - lw - rw
+		if gap < 1 {
+			gap = 0
+		}
 	}
-	return pad(left+strings.Repeat(" ", gap)+right, f.width)
-}
-
-func truncate(s string, max int) string {
-	if max <= 0 {
-		return ""
-	}
-	if lipgloss.Width(s) <= max {
-		return s
-	}
-	return ansi.Truncate(s, max, "…")
-}
-
-func pad(s string, width int) string {
-	if width <= 0 {
-		return ""
-	}
-	w := lipgloss.Width(s)
-	switch {
-	case w == width:
-		return s
-	case w > width:
-		// Flag emoji / CJK can under-measure; clip so resize ghosts don't accumulate.
-		return ansi.Truncate(s, width, "")
-	default:
-		return s + strings.Repeat(" ", width-w)
-	}
+	return fitCells(left+strings.Repeat(" ", gap)+right, width)
 }
 
 func lineCount(s string) int {
@@ -411,19 +412,18 @@ func lineCount(s string) int {
 }
 
 func buildRow(width int, mark, name, delay string, rowStyle, delayStyle lipgloss.Style, fullRow, current bool) string {
-	nameMax := width - lipgloss.Width(mark)
+	nameMax := width - cellWidth(mark)
 	if delay != "" {
-		// Reserve room for " ··· " leader so long names don't eat the whole row.
-		nameMax -= lipgloss.Width(delay) + 4
+		nameMax -= cellWidth(delay) + 4
 	}
 	if nameMax < 1 {
 		nameMax = 1
 	}
 	prefix := mark + truncate(name, nameMax)
 	if delay == "" {
-		return rowStyle.Render(pad(prefix, width))
+		return rowStyle.Render(fitCells(prefix, width))
 	}
-	gap := width - lipgloss.Width(prefix) - lipgloss.Width(delay)
+	gap := width - cellWidth(prefix) - cellWidth(delay)
 	if gap < 0 {
 		gap = 0
 	}
@@ -435,7 +435,7 @@ func buildRow(width int, mark, name, delay string, rowStyle, delayStyle lipgloss
 	case current:
 		leaderStyle = leaderOn
 	}
-	rest := width - lipgloss.Width(prefix) - lipgloss.Width(leader) - lipgloss.Width(delay)
+	rest := width - cellWidth(prefix) - cellWidth(leader) - cellWidth(delay)
 	if rest < 0 {
 		rest = 0
 	}
@@ -456,41 +456,50 @@ func dashedLeader(gap int) string {
 	case gap <= 2:
 		return strings.Repeat(" ", gap)
 	default:
-		return " " + strings.Repeat("·", gap-2) + " "
+		return " " + strings.Repeat(".", gap-2) + " "
 	}
 }
 
-func usageCircle(used, total int64) string {
+func usageBar(used, total int64) string {
 	if total <= 0 {
 		return ""
 	}
+	const width = 8
+	filled := ratioFill(used, total, width)
+	fill := barFull
 	ratio := float64(used) / float64(total)
-	if ratio < 0 {
-		ratio = 0
-	}
-	if ratio > 1 {
-		ratio = 1
-	}
-	style := barFull
 	switch {
 	case ratio > 0.9:
-		style = barDanger
+		fill = barDanger
 	case ratio > 0.7:
-		style = barWarning
+		fill = barWarning
 	}
-	glyph := "○"
+	label := fmt.Sprintf("%s/%s", formatBytes(used), formatBytes(total))
+
+	// [####----]：括号与空档淡墨，填充按阈值；数字淡墨作说明。
+	var b strings.Builder
+	b.WriteString(textSubtle.Render("["))
+	if filled > 0 {
+		b.WriteString(fill.Render(strings.Repeat("#", filled)))
+	}
+	if empty := width - filled; empty > 0 {
+		b.WriteString(textSubtle.Render(strings.Repeat("-", empty)))
+	}
+	b.WriteString(textSubtle.Render("] " + label))
+	return b.String()
+}
+
+func formatBytes(n int64) string {
 	switch {
-	case ratio >= 0.875:
-		glyph = "●"
-	case ratio >= 0.625:
-		glyph = "◕"
-	case ratio >= 0.375:
-		glyph = "◑"
-	case ratio >= 0.125:
-		glyph = "◔"
+	case n >= 1<<30:
+		return fmt.Sprintf("%.1fG", float64(n)/(1<<30))
+	case n >= 1<<20:
+		return fmt.Sprintf("%.1fM", float64(n)/(1<<20))
+	case n >= 1<<10:
+		return fmt.Sprintf("%.1fK", float64(n)/(1<<10))
+	default:
+		return fmt.Sprintf("%dB", n)
 	}
-	label := fmt.Sprintf("%s / %s", formatBytes(used), formatBytes(total))
-	return style.Render(glyph) + " " + textSubtle.Render(label)
 }
 
 func formatRate(n int64) string {
@@ -503,19 +512,6 @@ func formatRate(n int64) string {
 		return fmt.Sprintf("%.1f KB/s", float64(n)/(1<<10))
 	default:
 		return fmt.Sprintf("%d B/s", n)
-	}
-}
-
-func formatBytes(n int64) string {
-	switch {
-	case n >= 1<<30:
-		return fmt.Sprintf("%.1f GB", float64(n)/(1<<30))
-	case n >= 1<<20:
-		return fmt.Sprintf("%.1f MB", float64(n)/(1<<20))
-	case n >= 1<<10:
-		return fmt.Sprintf("%.1f KB", float64(n)/(1<<10))
-	default:
-		return fmt.Sprintf("%d B", n)
 	}
 }
 
@@ -578,11 +574,12 @@ func (m Model) listBudget() int {
 	if m.height <= 0 {
 		return 8
 	}
-	used := 3 // HUD base (top + status/traffic + bottom)
+	used := 3 // HUD: top + status + bottom
 	if m.err != "" {
 		used++
 	}
-	used += 4 + 3 // panel chrome + footer
+	// panel: top + title + mid + bottom; footer: top + buttons + bottom (+ leading gap)
+	used += 4 + 4
 	b := m.height - used
 	if b < 1 {
 		return 1
@@ -591,7 +588,6 @@ func (m Model) listBudget() int {
 }
 
 func (m Model) linkListBudget() int {
-	// Keep the modal compact so it stays centered over the main screen.
 	b := 8
 	if m.height > 0 {
 		b = m.height/2 - 6

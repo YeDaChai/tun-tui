@@ -25,7 +25,6 @@ const (
 )
 
 type tickMsg struct{}
-type spinnerTickMsg struct{}
 type trafficMsg struct {
 	gen     uint64
 	traffic api.Traffic
@@ -81,7 +80,7 @@ type Model struct {
 	err             string
 	width           int
 	height          int
-	spinner         int
+	anim            int
 	settingsNote    string
 	pollGen         uint64 // drops stale traffic/refresh after mode switch etc.
 	tickN           uint64
@@ -126,7 +125,7 @@ func New(paths config.Paths, runner *core.Runner, client *api.Client) Model {
 }
 
 func (m Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{tick(), textinput.Blink}
+	cmds := []tea.Cmd{tick(), animTick(), textinput.Blink}
 	if m.hasSubscription {
 		cmds = append(cmds, func() tea.Msg { return autoConnectMsg{} })
 	}
@@ -135,10 +134,6 @@ func (m Model) Init() tea.Cmd {
 
 func tick() tea.Cmd {
 	return tea.Tick(2*time.Second, func(time.Time) tea.Msg { return tickMsg{} })
-}
-
-func spinnerTick() tea.Cmd {
-	return tea.Tick(80*time.Millisecond, func(time.Time) tea.Msg { return spinnerTickMsg{} })
 }
 
 const delayConcurrency = 8
@@ -319,12 +314,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(cmds...)
 
-	case spinnerTickMsg:
-		if !m.work.spinning() {
-			return m, nil
-		}
-		m.spinner++
-		return m, spinnerTick()
+	case animTickMsg:
+		m.tickAnim()
+		return m, animTick()
 
 	case trafficMsg:
 		if msg.gen != m.pollGen || !m.running {
@@ -426,7 +418,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.running, m.err = true, ""
 		m = m.beginNodesLoad()
-		return m, tea.Batch(m.fetchNodesCmd(), spinnerTick())
+		return m, m.fetchNodesCmd()
 
 	case clearDataMsg:
 		return m.applyClearedData(msg), nil
@@ -589,10 +581,10 @@ func (m Model) beginConnect() (Model, tea.Cmd) {
 	m.nodes = nil
 	m.delays = map[string]uint16{}
 	m.cursor, m.rowOffset = 0, 0
-	return m, tea.Batch(spinnerTick(), func() tea.Msg {
+	return m, func() tea.Msg {
 		if err := m.runner.Start(); err != nil {
 			return startMsg{err: err}
 		}
 		return startMsg{}
-	})
+	}
 }
