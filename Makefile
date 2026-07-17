@@ -121,4 +121,4 @@ help:
 	@echo "make clean        清理 bin/ dist/"
 	@echo ""
 	@echo "覆盖平台: make build GOOS=linux GOARCH=amd64"
-	@echo "指定版本: make release VERSION=0.2.4"
+	@echo "指定版本: make release VERSION=0.2.5"
