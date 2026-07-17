@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
@@ -15,5 +16,18 @@ func TestPadExactWidth(t *testing.T) {
 	}
 	if got := pad("hello", 5); got != "hello" {
 		t.Fatalf("pad exact: %q", got)
+	}
+}
+
+func TestDashedLeader(t *testing.T) {
+	if got := dashedLeader(0); got != "" {
+		t.Fatalf("gap0: %q", got)
+	}
+	if got := dashedLeader(2); got != "  " {
+		t.Fatalf("gap2: %q", got)
+	}
+	got := dashedLeader(6)
+	if lipgloss.Width(got) != 6 || !strings.Contains(got, "·") {
+		t.Fatalf("gap6: %q", got)
 	}
 }

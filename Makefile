@@ -4,7 +4,7 @@
 
 APP     := tun-tui
 MODULE  := tun-tui
-VERSION ?= 0.2.2
+VERSION ?= 0.2.4
 COMMIT  := $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 DATE    := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 
@@ -121,4 +121,4 @@ help:
 	@echo "make clean        清理 bin/ dist/"
 	@echo ""
 	@echo "覆盖平台: make build GOOS=linux GOARCH=amd64"
-	@echo "指定版本: make release VERSION=0.2.2"
+	@echo "指定版本: make release VERSION=0.2.4"

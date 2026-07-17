@@ -143,6 +143,10 @@ func (m Model) reloadActiveSubscription(base actionMsg) tea.Msg {
 	if !m.running {
 		return base
 	}
+	if err := config.ClearProviderCache(m.paths.DataDir); err != nil {
+		base.err = err
+		return base
+	}
 	if err := reloadAndSyncMode(m.runner, m.api, m.paths.DataDir); err != nil {
 		base.err = err
 		return base

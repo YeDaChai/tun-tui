@@ -207,7 +207,10 @@ func (c *Client) PatchMode(mode string) error {
 
 // Traffic reads one snapshot from the streaming /traffic endpoint.
 func (c *Client) Traffic() (Traffic, error) {
-	req, err := http.NewRequest(http.MethodGet, c.base+"/traffic", nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/traffic", nil)
 	if err != nil {
 		return Traffic{}, err
 	}
@@ -215,8 +218,9 @@ func (c *Client) Traffic() (Traffic, error) {
 		req.Header.Set("Authorization", "Bearer "+c.secret)
 	}
 
-	// Streaming endpoint: avoid the shared client timeout so we can read one frame.
-	client := &http.Client{Timeout: 3 * time.Second}
+	// Shared client Timeout covers the whole body; use a short-timeout clone for the stream.
+	client := *c.http
+	client.Timeout = 3 * time.Second
 	resp, err := client.Do(req)
 	if err != nil {
 		return Traffic{}, err
