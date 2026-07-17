@@ -11,6 +11,12 @@ curl -fsSL https://raw.githubusercontent.com/YeDaChai/tun-tui/main/scripts/insta
 sudo tun-tui
 ```
 
+更新到最新版：
+
+```bash
+tun-tui update
+```
+
 **Windows / 手动安装：** 到 [Releases](https://github.com/YeDaChai/tun-tui/releases) 下载对应压缩包，解压后以管理员身份运行。
 
 | 你的电脑 | 下载文件 |
@@ -81,6 +87,6 @@ make release     # 打包到 dist/
 make help        # 查看全部目标
 ```
 
-发布：`git tag v0.2.5 && git push origin v0.2.5`
+发布：`git tag v0.2.6 && git push origin v0.2.6`
 
 MIT

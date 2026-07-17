@@ -14,7 +14,6 @@ import (
 	"tun-tui/internal/api"
 	"tun-tui/internal/config"
 	"tun-tui/internal/core"
-	"tun-tui/internal/update"
 )
 
 type screen int
@@ -86,7 +85,6 @@ type Model struct {
 	settingsNote    string
 	pollGen         uint64 // drops stale traffic/refresh after mode switch etc.
 	tickN           uint64
-	updateInfo      update.Info
 }
 
 func Run(ctx context.Context, paths config.Paths, runner *core.Runner, client *api.Client, binName string) error {
@@ -432,12 +430,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case clearDataMsg:
 		return m.applyClearedData(msg), nil
-
-	case checkUpdateMsg:
-		return m.applyCheckUpdate(msg), nil
-
-	case applyUpdateMsg:
-		return m.applyAppUpdate(msg), nil
 
 	case autoConnectMsg:
 		return m.beginConnect()

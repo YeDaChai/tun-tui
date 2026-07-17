@@ -9,7 +9,7 @@ const (
 	workConnecting
 	workLoadingNodes
 	workTesting
-	workActing // mode switch, select node, link CRUD, clear data, app update
+	workActing // mode switch, select node, link CRUD, clear data
 )
 
 func (s workState) busy() bool { return s != workIdle }
