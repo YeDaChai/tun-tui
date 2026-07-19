@@ -68,13 +68,12 @@ func (m Model) updateLinkList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if len(m.linkURLs) == 0 || m.work.busy() {
 			return m, nil
 		}
-		cmds := []tea.Cmd{m.deleteLink(m.linkCursor)}
 		if m.running && m.linkCursor == m.linkActive {
 			m = m.beginNodesLoad()
 		} else {
 			m.work = workActing
 		}
-		return m, tea.Batch(cmds...)
+		return m, m.deleteLink(m.linkCursor)
 	case "enter":
 		if len(m.linkURLs) == 0 {
 			m.linkInputFocus = true
@@ -84,17 +83,12 @@ func (m Model) updateLinkList(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.work.busy() {
 			return m, nil
 		}
-		cmds := []tea.Cmd{m.selectLink(m.linkCursor)}
 		if m.running {
 			m = m.beginNodesLoad()
 		} else {
 			m.work = workActing
 		}
-		return m.closeLinkScreen(), tea.Batch(cmds...)
-	case "ctrl+c":
-		m.stopDelayTest()
-		_ = m.runner.Stop()
-		return m, tea.Quit
+		return m.closeLinkScreen(), m.selectLink(m.linkCursor)
 	}
 	return m, nil
 }
@@ -118,17 +112,12 @@ func (m Model) updateLinkInput(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.linkInput.SetValue("")
 		m.linkInputFocus = false
 		m.linkInput.Blur()
-		cmds := []tea.Cmd{m.addLink(url)}
 		if m.running {
 			m = m.beginNodesLoad()
 		} else {
 			m.work = workActing
 		}
-		return m, tea.Batch(cmds...)
-	case "ctrl+c":
-		m.stopDelayTest()
-		_ = m.runner.Stop()
-		return m, tea.Quit
+		return m, m.addLink(url)
 	}
 	var cmd tea.Cmd
 	m.linkInput, cmd = m.linkInput.Update(msg)

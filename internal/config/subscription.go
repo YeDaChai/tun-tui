@@ -79,14 +79,14 @@ func SaveSubscriptionLinks(dataDir string, urls []string, active int) error {
 	if err := os.WriteFile(path, []byte(formatSubscriptionLinks(clean, active)), 0o600); err != nil {
 		return err
 	}
-	_ = chownToSudoUser(path)
+	_ = ChownToSudoUser(path)
 
 	// Keep legacy single-url file in sync for external tooling.
 	legacyPath := subscriptionFile(dataDir)
 	if err := os.WriteFile(legacyPath, []byte(clean[active]+"\n"), 0o600); err != nil {
 		return err
 	}
-	_ = chownToSudoUser(legacyPath)
+	_ = ChownToSudoUser(legacyPath)
 	return nil
 }
 

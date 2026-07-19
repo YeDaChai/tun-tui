@@ -441,6 +441,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.beginConnect()
 
 	case tea.KeyMsg:
+		if msg.String() == "ctrl+c" {
+			return m.quit()
+		}
 		if m.screen == screenLinkList {
 			return m.updateLinkScreen(msg)
 		}
@@ -452,12 +455,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// quit stops background work and the kernel, then exits the program.
+func (m Model) quit() (tea.Model, tea.Cmd) {
+	m.stopDelayTest()
+	_ = m.runner.Stop()
+	return m, tea.Quit
+}
+
 func (m Model) updateMain(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	case "ctrl+c", "q":
-		m.stopDelayTest()
-		_ = m.runner.Stop()
-		return m, tea.Quit
+	case "q":
+		return m.quit()
 	case "l":
 		return m.openLinkScreen(), textinput.Blink
 	case "p":

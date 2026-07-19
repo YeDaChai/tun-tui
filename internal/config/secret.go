@@ -33,6 +33,6 @@ func LoadOrCreateAPISecret(dataDir string) (string, error) {
 	if err := os.WriteFile(path, []byte(secret+"\n"), 0o600); err != nil {
 		return "", fmt.Errorf("write api secret: %w", err)
 	}
-	_ = chownToSudoUser(path)
+	_ = ChownToSudoUser(path)
 	return secret, nil
 }

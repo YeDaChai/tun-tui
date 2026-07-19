@@ -8,7 +8,8 @@ import (
 	"strconv"
 )
 
-func chownToSudoUser(path string) error {
+// ChownToSudoUser reassigns ownership after sudo writes so the real user can manage files.
+func ChownToSudoUser(path string) error {
 	sudoUser := os.Getenv("SUDO_USER")
 	if sudoUser == "" || os.Geteuid() != 0 {
 		return nil
@@ -26,9 +27,4 @@ func chownToSudoUser(path string) error {
 		return nil
 	}
 	return os.Chown(path, uid, gid)
-}
-
-// ChownToSudoUser reassigns ownership after sudo writes so the real user can manage files.
-func ChownToSudoUser(path string) error {
-	return chownToSudoUser(path)
 }

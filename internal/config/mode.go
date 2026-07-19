@@ -11,14 +11,14 @@ func modePath(dataDir string) string {
 }
 
 func LoadMode(dataDir, fallback string) string {
-	fallback = normalizeMode(fallback)
+	fallback = NormalizeMode(fallback)
 	if fallback == "" {
 		fallback = "rule"
 	}
 
 	path := modePath(dataDir)
 	if data, err := os.ReadFile(path); err == nil {
-		if mode := normalizeMode(strings.TrimSpace(string(data))); mode != "" {
+		if mode := NormalizeMode(strings.TrimSpace(string(data))); mode != "" {
 			return mode
 		}
 	}
@@ -27,7 +27,7 @@ func LoadMode(dataDir, fallback string) string {
 }
 
 func SaveMode(dataDir, mode string) error {
-	mode = normalizeMode(mode)
+	mode = NormalizeMode(mode)
 	if mode == "" {
 		return nil
 	}
@@ -38,14 +38,10 @@ func SaveMode(dataDir, mode string) error {
 	if err := os.WriteFile(path, []byte(mode+"\n"), 0o644); err != nil {
 		return err
 	}
-	return chownToSudoUser(path)
+	return ChownToSudoUser(path)
 }
 
 func NormalizeMode(mode string) string {
-	return normalizeMode(mode)
-}
-
-func normalizeMode(mode string) string {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case "rule", "global", "direct":
 		return strings.ToLower(strings.TrimSpace(mode))

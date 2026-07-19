@@ -41,21 +41,13 @@ func (m Model) contentWidth() int {
 	return m.width
 }
 
-func (m Model) modalWidth(max int) int {
-	w := m.contentWidth() - 8
-	if w > max {
-		w = max
-	}
+// modalWidth: min(contentWidth-8, max); 窄屏退回 min(contentWidth, 36)，不小于 24。
+func (m Model) modalWidth(maxW int) int {
+	w := min(m.contentWidth()-8, maxW)
 	if w < 36 {
-		w = m.contentWidth()
-		if w > 36 {
-			w = 36
-		}
+		w = min(m.contentWidth(), 36)
 	}
-	if w < 24 {
-		w = 24
-	}
-	return w
+	return max(w, 24)
 }
 
 func (m Model) renderHUD() string {
@@ -395,13 +387,6 @@ func (f frame) bottom() string {
 	return f.border.Render("'~" + strings.Repeat("=", f.width-4) + "~'")
 }
 
-func (f frame) mid() string {
-	if f.width < 4 {
-		return f.border.Render(strings.Repeat("~", max(f.width, 0)))
-	}
-	return f.border.Render("~-" + strings.Repeat("~", f.width-4) + "-~")
-}
-
 func (f frame) row(s string) string {
 	inner := f.width - 2
 	if inner < 1 {
@@ -411,18 +396,11 @@ func (f frame) row(s string) string {
 }
 
 func splitRow(width int, left, right string) string {
-	lw, rw := cellWidth(left), cellWidth(right)
-	gap := width - lw - rw
-	if gap < 1 {
-		gap = 1
-		left = truncate(left, width-rw-gap)
-		lw = cellWidth(left)
-		gap = width - lw - rw
-		if gap < 1 {
-			gap = 0
-		}
+	rw := cellWidth(right)
+	if cellWidth(left)+rw >= width {
+		left = truncate(left, width-rw-1)
 	}
-	return fitCells(left+strings.Repeat(" ", gap)+right, width)
+	return fitCells(left+strings.Repeat(" ", max(width-cellWidth(left)-rw, 0))+right, width)
 }
 
 func lineCount(s string) int {

@@ -9,36 +9,21 @@ import (
 	"time"
 )
 
-// ReadyFunc probes whether the kernel control plane is up.
-type ReadyFunc func(ctx context.Context) error
-
-// DefaultReadyCheck polls the external-controller HTTP API until it responds.
-func DefaultReadyCheck(addr, secret string) ReadyFunc {
-	return func(ctx context.Context) error {
-		err := waitReady(ctx, func(ctx context.Context) error {
-			return pingController(ctx, addr, secret)
-		}, 100*time.Millisecond)
-		if err != nil && (errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled)) {
-			return fmt.Errorf("内核未响应控制接口 %s，启动可能失败（检查权限或端口占用）", addr)
-		}
-		return err
-	}
-}
-
-func waitReady(ctx context.Context, check func(context.Context) error, interval time.Duration) error {
-	if err := check(ctx); err == nil {
-		return nil
-	}
-	ticker := time.NewTicker(interval)
+// WaitReady polls the external-controller HTTP API until it responds or ctx expires.
+func WaitReady(ctx context.Context, addr, secret string) error {
+	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	for {
+		if err := pingController(ctx, addr, secret); err == nil {
+			return nil
+		}
 		select {
 		case <-ctx.Done():
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(ctx.Err(), context.Canceled) {
+				return fmt.Errorf("内核未响应控制接口 %s，启动可能失败（检查权限或端口占用）", addr)
+			}
 			return ctx.Err()
 		case <-ticker.C:
-			if err := check(ctx); err == nil {
-				return nil
-			}
 		}
 	}
 }

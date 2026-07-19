@@ -14,6 +14,8 @@ import (
 	"time"
 )
 
+const defaultTimeout = 10 * time.Second
+
 type Client struct {
 	base   string
 	secret string
@@ -24,9 +26,7 @@ func New(base, secret string) *Client {
 	return &Client{
 		base:   base,
 		secret: secret,
-		http: &http.Client{
-			Timeout: 10 * time.Second,
-		},
+		http:   &http.Client{Timeout: defaultTimeout},
 	}
 }
 
@@ -34,7 +34,8 @@ func (c *Client) SetSecret(secret string) {
 	c.secret = secret
 }
 
-func (c *Client) request(method, path string, body any) ([]byte, error) {
+// newRequest builds an authenticated request; body is JSON-marshalled when non-nil.
+func (c *Client) newRequest(ctx context.Context, method, path string, body any) (*http.Request, error) {
 	var reader io.Reader
 	if body != nil {
 		data, err := json.Marshal(body)
@@ -44,34 +45,57 @@ func (c *Client) request(method, path string, body any) ([]byte, error) {
 		reader = bytes.NewReader(data)
 	}
 
-	req, err := http.NewRequest(method, c.base+path, reader)
+	req, err := http.NewRequestWithContext(ctx, method, c.base+path, reader)
 	if err != nil {
 		return nil, err
 	}
-
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
 	if c.secret != "" {
 		req.Header.Set("Authorization", "Bearer "+c.secret)
 	}
+	return req, nil
+}
 
-	resp, err := c.http.Do(req)
+// do runs req with the given timeout (0 = default). Status >= 400 becomes *HTTPError.
+func (c *Client) do(req *http.Request, timeout time.Duration) (*http.Response, error) {
+	client := c.http
+	if timeout > 0 && timeout != defaultTimeout {
+		clone := *c.http
+		clone.Timeout = timeout
+		client = &clone
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	if resp.StatusCode >= 400 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		_ = resp.Body.Close()
+		return nil, &HTTPError{
+			Method:     req.Method,
+			Path:       req.URL.RequestURI(),
+			StatusCode: resp.StatusCode,
+			Status:     resp.Status,
+			Body:       strings.TrimSpace(string(body)),
+		}
+	}
+	return resp, nil
+}
+
+// request sends a request with the default timeout and returns the response body.
+func (c *Client) request(method, path string, body any) ([]byte, error) {
+	req, err := c.newRequest(context.Background(), method, path, body)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.do(req, 0)
 	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, err
-	}
-
-	if resp.StatusCode >= 400 {
-		return nil, &HTTPError{Method: method, Path: path, StatusCode: resp.StatusCode, Status: resp.Status}
-	}
-
-	return data, nil
+	return io.ReadAll(resp.Body)
 }
 
 type HTTPError struct {
@@ -79,9 +103,13 @@ type HTTPError struct {
 	Path       string
 	StatusCode int
 	Status     string
+	Body       string
 }
 
 func (e *HTTPError) Error() string {
+	if e.Body != "" {
+		return fmt.Sprintf("api %s %s: %s: %s", e.Method, e.Path, e.Status, e.Body)
+	}
 	return fmt.Sprintf("api %s %s: %s", e.Method, e.Path, e.Status)
 }
 
@@ -210,31 +238,15 @@ func (c *Client) Traffic() (Traffic, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+"/traffic", nil)
+	req, err := c.newRequest(ctx, http.MethodGet, "/traffic", nil)
 	if err != nil {
 		return Traffic{}, err
 	}
-	if c.secret != "" {
-		req.Header.Set("Authorization", "Bearer "+c.secret)
-	}
-
-	// Shared client Timeout covers the whole body; use a short-timeout clone for the stream.
-	client := *c.http
-	client.Timeout = 3 * time.Second
-	resp, err := client.Do(req)
+	resp, err := c.do(req, 3*time.Second)
 	if err != nil {
 		return Traffic{}, err
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		return Traffic{}, &HTTPError{
-			Method:     http.MethodGet,
-			Path:       "/traffic",
-			StatusCode: resp.StatusCode,
-			Status:     resp.Status,
-		}
-	}
 
 	line, err := bufio.NewReader(resp.Body).ReadBytes('\n')
 	if err != nil && !errors.Is(err, io.EOF) {
@@ -258,39 +270,20 @@ func (c *Client) ProxyDelay(ctx context.Context, name string) (uint16, error) {
 		url.PathEscape(name),
 		url.QueryEscape(delayTestURL),
 	)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.base+path, nil)
+	req, err := c.newRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return 0, err
 	}
-	if c.secret != "" {
-		req.Header.Set("Authorization", "Bearer "+c.secret)
-	}
-
-	client := *c.http
-	client.Timeout = 8 * time.Second
-	resp, err := client.Do(req)
+	resp, err := c.do(req, 8*time.Second)
 	if err != nil {
 		return 0, err
 	}
 	defer resp.Body.Close()
 
-	data, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return 0, err
-	}
-	if resp.StatusCode >= 400 {
-		return 0, &HTTPError{
-			Method:     http.MethodGet,
-			Path:       path,
-			StatusCode: resp.StatusCode,
-			Status:     resp.Status,
-		}
-	}
-
 	var out struct {
 		Delay uint16 `json:"delay"`
 	}
-	if err := json.Unmarshal(data, &out); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return 0, err
 	}
 	return out.Delay, nil
@@ -307,28 +300,15 @@ func (c *Client) Providers() (ProvidersResponse, error) {
 }
 
 func (c *Client) UpdateProvider(name string) error {
-	path := "/providers/proxies/" + url.PathEscape(name)
-	req, err := http.NewRequest(http.MethodPut, c.base+path, nil)
+	req, err := c.newRequest(context.Background(), http.MethodPut, "/providers/proxies/"+url.PathEscape(name), nil)
 	if err != nil {
 		return err
 	}
-	if c.secret != "" {
-		req.Header.Set("Authorization", "Bearer "+c.secret)
-	}
-
-	client := *c.http
-	client.Timeout = 30 * time.Second
-	resp, err := client.Do(req)
+	resp, err := c.do(req, 30*time.Second)
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 400 {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("api PUT %s: %s %s", path, resp.Status, strings.TrimSpace(string(body)))
-	}
-	return nil
+	return resp.Body.Close()
 }
 
 type Configs struct {

@@ -42,10 +42,8 @@ func (m Model) updateSettingsScreen(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.settingsNote = ""
 		m.err = ""
 		return m, m.clearDataCmd()
-	case "ctrl+c", "q":
-		m.stopDelayTest()
-		_ = m.runner.Stop()
-		return m, tea.Quit
+	case "q":
+		return m.quit()
 	}
 	return m, nil
 }

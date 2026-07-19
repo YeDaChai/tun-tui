@@ -57,7 +57,7 @@ func (m Model) selectBurstMark() string {
 	}
 }
 
-// energyFill：约 1 MiB/s 满格（测试 / 预留进度条用）。
+// energyFill：对数刻度，约 1 MiB/s 满格（流量活动条用）。
 func energyFill(rate int64, width int) int {
 	if width <= 0 || rate <= 0 {
 		return 0

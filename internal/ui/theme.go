@@ -36,7 +36,6 @@ var (
 	leaderActive = lipgloss.NewStyle().Foreground(suggest).Background(selBg)
 	leaderOn     = lipgloss.NewStyle().Foreground(ok)
 	footerKey    = lipgloss.NewStyle().Foreground(accent).Bold(true)
-	footerLabel  = lipgloss.NewStyle().Foreground(muted)
 	footerSep    = lipgloss.NewStyle().Foreground(subtle)
 	sectionTitle = lipgloss.NewStyle().Foreground(accent).Bold(true)
 	barFull      = lipgloss.NewStyle().Foreground(ok)

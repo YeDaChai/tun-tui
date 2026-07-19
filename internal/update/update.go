@@ -46,24 +46,26 @@ func latestAPI() string {
 }
 
 // Check compares the running version against GitHub latest release.
+// Asset resolution happens only when an update is actually available.
 func Check(current string) (Info, error) {
 	rel, err := fetchLatest()
 	if err != nil {
 		return Info{}, err
 	}
-	latest := Normalize(rel.TagName)
-	current = Normalize(current)
-	asset, url, err := pickAsset(rel, latest, runtime.GOOS, runtime.GOARCH)
+	info := Info{
+		Current: Normalize(current),
+		Latest:  Normalize(rel.TagName),
+	}
+	info.Newer = IsNewer(info.Latest, info.Current)
+	if !info.Newer {
+		return info, nil
+	}
+	name, url, err := pickAsset(rel, info.Latest)
 	if err != nil {
 		return Info{}, err
 	}
-	return Info{
-		Current:     current,
-		Latest:      latest,
-		Newer:       IsNewer(latest, current),
-		DownloadURL: url,
-		AssetName:   asset,
-	}, nil
+	info.AssetName, info.DownloadURL = name, url
+	return info, nil
 }
 
 // Apply downloads Info.DownloadURL and replaces the running executable.
@@ -129,72 +131,32 @@ func fetchLatest() (Release, error) {
 	return rel, nil
 }
 
-func pickAsset(rel Release, version, goos, goarch string) (name, url string, err error) {
-	cands, err := archiveCandidates(version, goos, goarch)
+// pickAsset finds the release archive for the current platform. Release names
+// are produced by the Makefile: tun-tui-<version>-<label>.<ext> — exact match only.
+func pickAsset(rel Release, version string) (name, url string, err error) {
+	want, err := platformArchive(version)
 	if err != nil {
 		return "", "", err
 	}
-	byName := make(map[string]string, len(rel.Assets))
 	for _, a := range rel.Assets {
-		if a.Name != "" && a.BrowserDownloadURL != "" {
-			byName[a.Name] = a.BrowserDownloadURL
-		}
-	}
-	for _, want := range cands {
-		if u, ok := byName[want]; ok {
-			return want, u, nil
-		}
-	}
-
-	// Fallback: match platform label inside any asset name (covers odd version prefixes).
-	label, ext, err := platformLabel(goos, goarch)
-	if err != nil {
-		return "", "", err
-	}
-	suffix := "-" + label + ext
-	for _, a := range rel.Assets {
-		if strings.HasSuffix(a.Name, suffix) && a.BrowserDownloadURL != "" {
+		if a.Name == want && a.BrowserDownloadURL != "" {
 			return a.Name, a.BrowserDownloadURL, nil
 		}
 	}
-	return "", "", fmt.Errorf("最新版本没有适合本机的包（%s/%s），期望如: %s", goos, goarch, cands[0])
+	return "", "", fmt.Errorf("最新版本没有适合本机的包（%s/%s），期望: %s", runtime.GOOS, runtime.GOARCH, want)
 }
 
-// PlatformArchive matches current Makefile / install.sh release names.
-func PlatformArchive(version string) (string, error) {
-	return platformArchive(version, runtime.GOOS, runtime.GOARCH)
-}
-
-func platformArchive(version, goos, goarch string) (string, error) {
+// platformArchive matches current Makefile / install.sh release names.
+func platformArchive(version string) (string, error) {
 	version = Normalize(version)
 	if version == "" {
 		return "", fmt.Errorf("版本号为空")
 	}
-	label, ext, err := platformLabel(goos, goarch)
+	label, ext, err := platformLabel(runtime.GOOS, runtime.GOARCH)
 	if err != nil {
 		return "", err
 	}
 	return fmt.Sprintf("%s-%s-%s%s", AppName, version, label, ext), nil
-}
-
-// archiveCandidates lists preferred asset names, including legacy aliases.
-func archiveCandidates(version, goos, goarch string) ([]string, error) {
-	primary, err := platformArchive(version, goos, goarch)
-	if err != nil {
-		return nil, err
-	}
-	out := []string{primary}
-	version = Normalize(version)
-	switch {
-	case goos == "darwin" && goarch == "arm64":
-		out = append(out, fmt.Sprintf("%s-%s-macos-apple-silicon.tar.gz", AppName, version))
-	case goos == "darwin" && goarch == "amd64":
-		out = append(out, fmt.Sprintf("%s-%s-macos-intel.tar.gz", AppName, version))
-	case goos == "windows" && goarch == "amd64":
-		// Older experimental names if any.
-		out = append(out, fmt.Sprintf("%s-%s-windows-amd64.zip", AppName, version))
-	}
-	return out, nil
 }
 
 func platformLabel(goos, goarch string) (label, ext string, err error) {

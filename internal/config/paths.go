@@ -95,11 +95,11 @@ func bootstrap(dataDir string) error {
 	if err := os.MkdirAll(dataDir, 0o755); err != nil {
 		return fmt.Errorf("create data dir: %w", err)
 	}
-	_ = chownToSudoUser(dataDir)
+	_ = ChownToSudoUser(dataDir)
 	if err := os.MkdirAll(filepath.Join(dataDir, "providers"), 0o755); err != nil {
 		return fmt.Errorf("create providers dir: %w", err)
 	}
-	_ = chownToSudoUser(filepath.Join(dataDir, "providers"))
+	_ = ChownToSudoUser(filepath.Join(dataDir, "providers"))
 
 	cfgPath := filepath.Join(dataDir, "config.yaml")
 	if _, err := os.Stat(cfgPath); os.IsNotExist(err) {
@@ -107,7 +107,7 @@ func bootstrap(dataDir string) error {
 			return fmt.Errorf("write default config: %w", err)
 		}
 	}
-	_ = chownToSudoUser(cfgPath)
+	_ = ChownToSudoUser(cfgPath)
 	// Geodata is installed on connect/reload via core.Runner.prepareConfig.
 	return nil
 }

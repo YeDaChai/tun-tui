@@ -154,7 +154,7 @@ func (r *Runner) verifyReady() error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
-	return DefaultReadyCheck(config.APIControllerAddr, r.secret)(ctx)
+	return WaitReady(ctx, config.APIControllerAddr, r.secret)
 }
 
 // cleanupGeoFiles removes stale GeoIP.dat (triggers download hang) and tiny/corrupt

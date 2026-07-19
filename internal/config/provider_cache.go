@@ -17,7 +17,7 @@ func ClearProviderCache(dataDir string) error {
 	if err := os.MkdirAll(filepath.Join(dataDir, "providers"), 0o755); err != nil {
 		return err
 	}
-	_ = chownToSudoUser(filepath.Join(dataDir, "providers"))
+	_ = ChownToSudoUser(filepath.Join(dataDir, "providers"))
 	_ = os.Remove(providerCachePath(dataDir))
 	_ = os.Remove(filepath.Join(dataDir, "providers", "subscription.source"))
 	return nil
